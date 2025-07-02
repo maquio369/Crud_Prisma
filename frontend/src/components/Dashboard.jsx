@@ -1,5 +1,4 @@
-// src/components/Dashboard.jsx - Mejoras para mostrar nombres de FK
-
+// src/components/Dashboard.jsx - Versión completa con Modal 2x2
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import Modal from './Modal';
@@ -13,19 +12,46 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({});
-  const [foreignKeyMappings, setForeignKeyMappings] = useState({}); // NUEVO: Para mapear FK
   
-  // Estados para modales y CRUD (mantener igual)
+  // Estados para modales y CRUD
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [crudLoading, setCrudLoading] = useState(false);
+  
+  // 🚀 NUEVO: Estados para el modal 2x2
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState(null);
 
   // Cargar tablas al montar el componente
   useEffect(() => {
     loadTables();
   }, []);
+
+  // 🚀 FUNCIÓN PARA CARGAR DATOS ANALÍTICOS
+  const loadAnalyticsData = async (tableName) => {
+    try {
+      // Simular carga de datos analíticos
+      const mockData = {
+        tableName,
+        totalRecords: pagination.total || 0,
+        columnsCount: schema?.columns?.length || 0,
+        lastModified: new Date().toISOString(),
+        relations: schema?.foreignKeys?.length || 0,
+        indexes: schema?.columns?.filter(col => col.is_primary_key)?.length || 0,
+        recentActivity: [
+          { action: 'CREATE', user: 'Admin', timestamp: new Date(Date.now() - 1000 * 60 * 2) },
+          { action: 'UPDATE', user: 'User123', timestamp: new Date(Date.now() - 1000 * 60 * 15) },
+          { action: 'DELETE', user: 'Admin', timestamp: new Date(Date.now() - 1000 * 60 * 60) }
+        ]
+      };
+      setAnalyticsData(mockData);
+      setShowAnalyticsModal(true);
+    } catch (error) {
+      showNotification('Error al cargar análisis: ' + error.message, 'error');
+    }
+  };
 
   const loadTables = async () => {
     try {
@@ -46,7 +72,6 @@ const Dashboard = () => {
       setLoading(true);
       setSelectedTable(tableName);
       
-      // Cargar schema y registros en paralelo
       const [schemaResponse, recordsResponse] = await Promise.all([
         apiService.getTableSchema(tableName),
         apiService.getRecords(tableName, { limit: 50 })
@@ -56,12 +81,8 @@ const Dashboard = () => {
       setRecords(recordsResponse.data.data);
       setPagination(recordsResponse.data.pagination);
       
-      // NUEVO: Guardar mappings de foreign keys si existen
-      if (recordsResponse.data.foreignKeyMappings) {
-        setForeignKeyMappings(recordsResponse.data.foreignKeyMappings);
-      } else {
-        setForeignKeyMappings({});
-      }
+      console.log('✅ Tabla cargada:', tableName);
+      console.log('📊 Registros con FK resueltas:', recordsResponse.data.data);
       
       setError(null);
     } catch (err) {
@@ -79,15 +100,12 @@ const Dashboard = () => {
       setLoading(true);
       const response = await apiService.getRecords(selectedTable, { 
         page, 
-        limit: pagination.limit 
+        limit: pagination.limit,
       });
+      
       setRecords(response.data.data);
       setPagination(response.data.pagination);
       
-      // NUEVO: Actualizar mappings si es necesario
-      if (response.data.foreignKeyMappings) {
-        setForeignKeyMappings(response.data.foreignKeyMappings);
-      }
     } catch (err) {
       setError('Error al cargar la página: ' + err.message);
     } finally {
@@ -95,13 +113,12 @@ const Dashboard = () => {
     }
   };
 
-  // CRUD Operations (mantener igual)
+  // CRUD Operations
   const handleCreateRecord = async (data) => {
     try {
       setCrudLoading(true);
       await apiService.createRecord(selectedTable, data);
       
-      // Recargar datos
       await selectTable(selectedTable);
       setShowCreateModal(false);
       
@@ -164,7 +181,6 @@ const Dashboard = () => {
   };
 
   const showNotification = (message, type) => {
-    // Función de notificación (mantener igual)
     const notification = document.createElement('div');
     notification.className = `fixed top-6 right-6 p-4 rounded-xl shadow-2xl z-50 transform transition-all duration-500 ease-out ${
       type === 'success' 
@@ -204,7 +220,6 @@ const Dashboard = () => {
     }, 4000);
   };
 
-  // MEJORADO: Función para renderizar valores de celda con FK resueltas
   const renderCellValue = (value, column, record) => {
     if (value === null || value === undefined) {
       return (
@@ -214,21 +229,48 @@ const Dashboard = () => {
       );
     }
 
-    // NUEVO: Si es una foreign key y tenemos el mapping, mostrar el nombre
-    if (column.is_foreign_key && foreignKeyMappings[column.column_name]) {
-      const displayField = foreignKeyMappings[column.column_name];
-      const displayValue = record[displayField];
+    const foreignKey = schema.foreignKeys?.find(fk => fk.column_name === column.column_name);
+    
+    if (foreignKey) {
+      const foreignTable = foreignKey.foreign_table_name;
+      const aliasPrefix = `${foreignTable}_data`;
       
-      return (
-        <div className="flex flex-col">
-          <span className="font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded-md">
-            {displayValue || 'Sin nombre'}
+      const possibleDisplayFields = [
+        `${aliasPrefix}_rol`,
+        `${aliasPrefix}_nombre`,
+        `${aliasPrefix}_name`,
+        `${aliasPrefix}_titulo`,
+        `${aliasPrefix}_title`,
+        `${aliasPrefix}_descripcion`,
+        `${aliasPrefix}_description`
+      ];
+      
+      let displayValue = null;
+      for (const fieldName of possibleDisplayFields) {
+        if (record[fieldName]) {
+          displayValue = record[fieldName];
+          break;
+        }
+      }
+      
+      if (displayValue) {
+        return (
+          <div className="flex items-center space-x-2">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 border border-purple-200">
+              🔗 {displayValue}
+            </span>
+            <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
+              ID: {value}
+            </span>
+          </div>
+        );
+      } else {
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-md text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+            🔗 ID: {value}
           </span>
-          <span className="text-xs text-gray-500 mt-1">
-            ID: {value}
-          </span>
-        </div>
-      );
+        );
+      }
     }
 
     if (column.data_type === 'boolean') {
@@ -246,24 +288,23 @@ const Dashboard = () => {
 
     if (column.is_primary_key) {
       return (
-        <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+        <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
           {value}
         </span>
       );
     }
 
-    // Formatear fechas
-    if (column.data_type.includes('timestamp') || column.data_type.includes('date')) {
+    if (column.data_type?.includes('timestamp') || column.data_type?.includes('date')) {
       try {
         const date = new Date(value);
         return (
-          <span className="text-gray-700 text-sm">
+          <span className="text-gray-700 text-sm bg-gray-50 px-2 py-1 rounded border">
             {date.toLocaleDateString('es-ES', {
               year: 'numeric',
               month: 'short',
               day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
+              hour: column.data_type.includes('timestamp') ? '2-digit' : undefined,
+              minute: column.data_type.includes('timestamp') ? '2-digit' : undefined
             })}
           </span>
         );
@@ -273,218 +314,6 @@ const Dashboard = () => {
     }
 
     return <span className="text-gray-900">{String(value)}</span>;
-  };
-
-  // Función para renderizar tabla de datos (mantener la mayoría igual, solo cambiar renderCellValue)
-  const renderDataTable = () => {
-    if (!selectedTable || !schema) {
-      return (
-        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50 to-white">
-          <div className="text-center max-w-md">
-            <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
-              <span className="text-4xl">📊</span>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">
-              Bienvenido a Dynamic DB Admin
-            </h3>
-            <p className="text-gray-600 leading-relaxed">
-              Selecciona una tabla de la lista lateral para comenzar a explorar y editar tus datos
-            </p>
-            <div className="mt-8 flex items-center justify-center space-x-4 text-sm text-gray-500">
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Conectado</span>
-              </div>
-              <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-              <span>{tables.length} tablas detectadas</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex-1 flex flex-col bg-white">
-        {/* Header de la tabla */}
-        <div className="bg-gradient-to-r from-white to-gray-50 border-b border-gray-200/60 px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white text-lg">🗂️</span>
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{selectedTable}</h1>
-                <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                  <span className="flex items-center space-x-1">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    <span>{pagination.total || 0} registros</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    <span>{schema.columns.length} columnas</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                    <span>PK: {schema.primaryKey || 'Ninguna'}</span>
-                  </span>
-                  {Object.keys(foreignKeyMappings).length > 0 && (
-                    <span className="flex items-center space-x-1">
-                      <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-                      <span>{Object.keys(foreignKeyMappings).length} FK resueltas</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={() => loadTables()}
-                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 flex items-center space-x-2 shadow-sm"
-              >
-                <span className="w-4 h-4">🔄</span>
-                <span>Actualizar</span>
-              </button>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 flex items-center space-x-2 shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transform hover:scale-105"
-              >
-                <span className="w-4 h-4">➕</span>
-                <span>Nuevo registro</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabla de datos */}
-        <div className="flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="relative">
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200"></div>
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent absolute top-0 left-0"></div>
-              </div>
-            </div>
-          ) : records.length === 0 ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">📭</span>
-                </div>
-                <p className="text-lg text-gray-600 font-medium">No hay registros en esta tabla</p>
-                <p className="text-gray-500 mt-1">Crea el primer registro para comenzar</p>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gradient-to-r from-gray-50 to-gray-100 sticky top-0 z-10">
-                  <tr>
-                    {schema.columns.map((column) => (
-                      <th
-                        key={column.column_name}
-                        className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-200"
-                      >
-                        <div className="flex items-center space-x-2">
-                          <span>{column.column_name}</span>
-                          <div className="flex space-x-1">
-                            {column.is_primary_key && (
-                              <span className="inline-flex items-center justify-center w-5 h-5 bg-yellow-100 text-yellow-600 rounded-full text-xs">
-                                🔑
-                              </span>
-                            )}
-                            {column.is_foreign_key && (
-                              <span className="inline-flex items-center justify-center w-5 h-5 bg-purple-100 text-purple-600 rounded-full text-xs">
-                                🔗
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-xs font-normal text-gray-500 mt-1 normal-case">
-                          <span className="px-2 py-1 bg-gray-200 rounded-md mr-2">{column.data_type}</span>
-                          {column.is_nullable === 'NO' && (
-                            <span className="px-2 py-1 bg-red-100 text-red-600 rounded-md text-xs">Requerido</span>
-                          )}
-                        </div>
-                      </th>
-                    ))}
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-200">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white">
-                  {records.map((record, index) => (
-                    <tr 
-                      key={index} 
-                      className="hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 border-b border-gray-100"
-                    >
-                      {schema.columns.map((column) => (
-                        <td
-                          key={column.column_name}
-                          className="px-6 py-4 text-sm"
-                        >
-                          <div className="max-w-xs overflow-hidden">
-                            {renderCellValue(record[column.column_name], column, record)}
-                          </div>
-                        </td>
-                      ))}
-                      <td className="px-6 py-4 text-sm">
-                        <div className="flex items-center space-x-2">
-                          <button 
-                            onClick={() => openEditModal(record)}
-                            className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                            title="Editar registro"
-                          >
-                            <span className="w-4 h-4 block">✏️</span>
-                          </button>
-                          <button 
-                            onClick={() => openDeleteModal(record)}
-                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                            title="Eliminar registro"
-                          >
-                            <span className="w-4 h-4 block">🗑️</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Paginación */}
-        {pagination.totalPages > 1 && (
-          <div className="bg-gradient-to-r from-white to-gray-50 border-t border-gray-200/60 px-8 py-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600 bg-gray-100 px-4 py-2 rounded-lg">
-                <span className="font-medium">Página {pagination.page}</span> de {pagination.totalPages} • 
-                <span className="font-medium ml-1">{pagination.total}</span> registros totales
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => loadPage(pagination.page - 1)}
-                  disabled={!pagination.hasPrev}
-                  className="px-4 py-2 border border-gray-300 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 flex items-center space-x-2"
-                >
-                  <span>←</span>
-                  <span>Anterior</span>
-                </button>
-                <button
-                  onClick={() => loadPage(pagination.page + 1)}
-                  disabled={!pagination.hasNext}
-                  className="px-4 py-2 border border-gray-300 rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 flex items-center space-x-2"
-                >
-                  <span>Siguiente</span>
-                  <span>→</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   const renderTablesList = () => (
@@ -576,6 +405,326 @@ const Dashboard = () => {
     </div>
   );
 
+  const renderDataTable = () => {
+    if (!selectedTable || !schema) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-gray-50">
+          <div className="text-center max-w-md">
+            <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-4">
+              <span className="text-2xl">📊</span>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Selecciona una tabla
+            </h3>
+            <p className="text-gray-600">
+              Elige una tabla del menú lateral para comenzar a explorar y editar tus datos
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    const tableDisplayName = selectedTable.charAt(0).toUpperCase() + selectedTable.slice(1);
+
+    return (
+      <div className="flex-1 bg-gray-50">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900 mb-2">
+                Administración de {tableDisplayName}
+              </h1>
+              <div className="flex items-center text-sm text-gray-500">
+                <span className="flex items-center">
+                  📊 {selectedTable}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-3">
+              {/* Botón Agregar */}
+              <button 
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center space-x-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Agregar</span>
+              </button>
+              
+              {/* 🚀 BOTÓN ANÁLISIS 2x2 - AGREGADO */}
+          
+              
+              <button className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <span>Buscar</span>
+              </button>
+              
+              <button className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Exportar</span>
+              </button>
+
+              <button className="p-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors duration-200">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Contenido */}
+        <div className="px-6 py-6">
+          {loading ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600 font-medium">Cargando datos...</p>
+              </div>
+            </div>
+          ) : records.length === 0 ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">📭</span>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No hay registros</h3>
+                <p className="text-gray-600 mb-4">Esta tabla no contiene datos</p>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 font-medium"
+                >
+                  Crear primer registro
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        #
+                      </th>
+                      
+                      {schema.columns.filter(col => !col.is_primary_key).map((column) => {
+                        const getColumnDisplayName = (columnName) => {
+                          const translations = {
+                            'nombres': 'Nombre',
+                            'apellidos': 'Apellidos', 
+                            'correo': 'Correo',
+                            'usuario': 'Usuario',
+                            'id_rol': 'Rol',
+                            'rol': 'Rol',
+                            'esta_borrado': 'Estado',
+                            'descripcion': 'Descripción',
+                            'clave': 'Contraseña',
+                            'documentos': 'Documentos'
+                          };
+                          return translations[columnName] || columnName.charAt(0).toUpperCase() + columnName.slice(1);
+                        };
+
+                        return (
+                          <th
+                            key={column.column_name}
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          >
+                            {getColumnDisplayName(column.column_name)}
+                          </th>
+                        );
+                      })}
+                      
+                      {/* 🚀 COLUMNA DE ACCIONES AGREGADA */}
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {records.map((record, index) => {
+                      const primaryKey = schema.primaryKey;
+                      const recordId = record[primaryKey];
+
+                      return (
+                        <tr 
+                          key={index} 
+                          className="hover:bg-gray-50 transition-colors duration-150"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                            <div className="flex items-center">
+                              <span className="text-blue-600 hover:text-blue-900 cursor-pointer">
+                                {recordId}
+                              </span>
+                            </div>
+                          </td>
+
+                          {schema.columns.filter(col => !col.is_primary_key).map((column) => (
+                            <td
+                              key={column.column_name}
+                              className="px-6 py-4 whitespace-nowrap text-sm"
+                            >
+                              {(() => {
+                                const value = record[column.column_name];
+                                
+                                if (value === null || value === undefined) {
+                                  return <span className="text-gray-400 italic">-</span>;
+                                }
+
+                                const foreignKey = schema.foreignKeys?.find(fk => fk.column_name === column.column_name);
+                                if (foreignKey) {
+                                  const foreignTable = foreignKey.foreign_table_name;
+                                  const aliasPrefix = `${foreignTable}_data`;
+                                  
+                                  const possibleDisplayFields = [
+                                    `${aliasPrefix}_rol`,
+                                    `${aliasPrefix}_nombre`,
+                                    `${aliasPrefix}_name`,
+                                    `${aliasPrefix}_titulo`,
+                                    `${aliasPrefix}_title`,
+                                    `${aliasPrefix}_descripcion`,
+                                    `${aliasPrefix}_description`
+                                  ];
+                                  
+                                  let displayValue = null;
+                                  for (const fieldName of possibleDisplayFields) {
+                                    if (record[fieldName]) {
+                                      displayValue = record[fieldName];
+                                      break;
+                                    }
+                                  }
+                                  
+                                  if (displayValue) {
+                                    const getBadgeColor = (value) => {
+                                      if (value === 'Administrador') return 'bg-purple-100 text-purple-800';
+                                      if (value === 'Enlace') return 'bg-blue-100 text-blue-800';
+                                      return 'bg-gray-100 text-gray-800';
+                                    };
+                                    
+                                    return (
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getBadgeColor(displayValue)}`}>
+                                        {displayValue}
+                                      </span>
+                                    );
+                                  } else {
+                                    return <span className="text-gray-500">ID: {value}</span>;
+                                  }
+                                }
+
+                                if (column.data_type === 'boolean') {
+                                  return (
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                      value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                      {value ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                  );
+                                }
+
+                                if (column.column_name === 'clave') {
+                                  return <span className="text-gray-400">••••••••</span>;
+                                }
+
+                                return (
+                                  <span className="text-gray-900">
+                                    {String(value)}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                          ))}
+                          
+                          {/* 🚀 COLUMNA DE ACCIONES */}
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <div className="flex items-center space-x-2">
+                              <button 
+                                onClick={() => openEditModal(record)}
+                                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
+                                title="Editar registro"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button 
+                                onClick={() => openDeleteModal(record)}
+                                className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
+                                title="Eliminar registro"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Paginación */}
+          {pagination.totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> a{' '}
+                <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de{' '}
+                <span className="font-medium">{pagination.total}</span> resultados
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => loadPage(pagination.page - 1)}
+                  disabled={!pagination.hasPrev}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                >
+                  Anterior
+                </button>
+                
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                    const pageNum = i + 1;
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => loadPage(pageNum)}
+                        className={`px-3 py-2 text-sm rounded-lg transition-colors duration-200 ${
+                          pagination.page === pageNum
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => loadPage(pagination.page + 1)}
+                  disabled={!pagination.hasNext}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-100">
@@ -644,7 +793,8 @@ const Dashboard = () => {
         {renderDataTable()}
       </div>
 
-      {/* Modales */}
+      {/* Modales existentes */}
+      {/* Modal Crear */}
       <Modal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
@@ -662,6 +812,7 @@ const Dashboard = () => {
         )}
       </Modal>
 
+      {/* Modal Editar */}
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -680,6 +831,7 @@ const Dashboard = () => {
         )}
       </Modal>
 
+      {/* Modal Eliminar */}
       <Modal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -713,7 +865,7 @@ const Dashboard = () => {
                     <div key={column.column_name} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
                       <span className="font-medium text-gray-700 flex items-center space-x-2">
                         {column.is_primary_key && <span className="text-yellow-500">🔑</span>}
-                        {column.is_foreign_key && <span className="text-purple-500">🔗</span>}
+                        {schema.foreignKeys?.some(fk => fk.column_name === column.column_name) && <span className="text-purple-500">🔗</span>}
                         <span>{column.column_name}:</span>
                       </span>
                       <span className="text-gray-900 font-mono bg-gray-50 px-2 py-1 rounded">
@@ -753,6 +905,9 @@ const Dashboard = () => {
           </div>
         )}
       </Modal>
+
+
+     
     </div>
   );
 };

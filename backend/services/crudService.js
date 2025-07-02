@@ -48,7 +48,7 @@ class CrudService {
     return result.rows[0];
   }
 
-  // READ - Obtener registros con paginación y filtros
+  // READ - Obtener registros con paginación y filtros (CON AUTO-INCLUDE DE FOREIGN KEYS)
   static async read(tableName, options = {}) {
     console.log(`📖 Leyendo registros de tabla: ${tableName}`);
     console.log('Opciones:', options);
@@ -59,11 +59,26 @@ class CrudService {
       filters = {},
       include = [],
       orderBy = null,
-      orderDirection = 'ASC'
+      orderDirection = 'ASC',
+      autoIncludeForeignKeys = true // NUEVA OPCIÓN - por defecto true
     } = options;
 
     const schema = await SchemaService.getTableSchema(tableName);
     const offset = (page - 1) * limit;
+    
+    // ========== NUEVA LÓGICA: AUTO-INCLUDE DE TODAS LAS FOREIGN KEYS ==========
+    let finalInclude = [...include];
+    
+    if (autoIncludeForeignKeys && schema.foreignKeys && schema.foreignKeys.length > 0) {
+      // Agregar automáticamente todas las tablas de foreign keys que no estén ya incluidas
+      const autoForeignTables = schema.foreignKeys
+        .map(fk => fk.foreign_table_name)
+        .filter(tableName => !include.includes(tableName));
+      
+      finalInclude = [...include, ...autoForeignTables];
+      console.log('🔗 Auto-incluyendo foreign keys:', autoForeignTables);
+    }
+    // ========================================================================
     
     // Construir WHERE clause para filtros
     let whereConditions = [];
@@ -104,12 +119,12 @@ class CrudService {
     let selectColumns = `${tableName}.*`;
     let joinClauses = '';
 
-    if (include.length > 0) {
-      console.log('Incluyendo relaciones:', include);
+    if (finalInclude.length > 0) {
+      console.log('Incluyendo relaciones:', finalInclude);
       const joins = [];
       const additionalSelects = [];
 
-      for (const relation of include) {
+      for (const relation of finalInclude) {
         const fkColumn = schema.foreignKeys.find(fk => 
           fk.foreign_table_name === relation
         );
@@ -123,11 +138,19 @@ class CrudService {
           
           // Obtener columnas de la tabla relacionada
           const relatedSchema = await SchemaService.getTableSchema(relation);
-          const relatedColumns = relatedSchema.columns
-            .map(col => `${alias}.${col.column_name} as ${alias}_${col.column_name}`)
-            .join(', ');
           
-          additionalSelects.push(relatedColumns);
+          // ========== NUEVA LÓGICA: SOLO INCLUIR COLUMNAS IMPORTANTES ==========
+          // Buscar la columna más importante para mostrar (nombre, título, etc.)
+          const displayColumn = this.findDisplayColumn(relatedSchema);
+          
+          // Incluir solo el ID y la columna de display
+          const importantColumns = [
+            `${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,
+            `${alias}.${displayColumn} as ${alias}_${displayColumn}`
+          ];
+          
+          additionalSelects.push(importantColumns.join(', '));
+          // ====================================================================
         }
       }
 
@@ -185,10 +208,31 @@ class CrudService {
     const total = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(total / limit);
 
+    // ========== NUEVA LÓGICA: POST-PROCESAMIENTO PARA MOSTRAR NOMBRES ==========
+    const processedData = dataResult.rows.map(row => {
+      const processedRow = { ...row };
+      
+      // Para cada foreign key, crear un campo virtual con el nombre legible
+      if (autoIncludeForeignKeys && schema.foreignKeys) {
+        schema.foreignKeys.forEach(fk => {
+          const alias = `${fk.foreign_table_name}_data`;
+          const displayColumnName = `${alias}_${this.findDisplayColumnName(fk.foreign_table_name)}`;
+          
+          if (row[displayColumnName]) {
+            // Crear campo virtual: ID_ROL_display = "Administrador"
+            processedRow[`${fk.column_name}_display`] = row[displayColumnName];
+          }
+        });
+      }
+      
+      return processedRow;
+    });
+    // ========================================================================
+
     console.log(`✅ Se obtuvieron ${dataResult.rows.length} registros de ${total} totales`);
 
     return {
-      data: dataResult.rows,
+      data: processedData, // Retorna datos procesados con nombres legibles
       pagination: {
         page,
         limit,
@@ -199,6 +243,32 @@ class CrudService {
       }
     };
   }
+
+  // ========== NUEVOS MÉTODOS HELPER ==========
+  static findDisplayColumn(schema) {
+    // Buscar columnas que podrían servir como display
+    const displayColumns = schema.columns.filter(col => 
+      col.column_name.includes('nombre') ||
+      col.column_name.includes('name') ||
+      col.column_name.includes('titulo') ||
+      col.column_name.includes('title') ||
+      col.column_name.includes('descripcion') ||
+      col.column_name.includes('description') ||
+      (col.data_type === 'text' && !col.is_primary_key)
+    );
+
+    // Si no hay columnas de display obvias, usar la primera columna text
+    return displayColumns.length > 0 
+      ? displayColumns[0].column_name 
+      : schema.columns.find(col => col.data_type === 'text')?.column_name ||
+        schema.primaryKey;
+  }
+
+  static async findDisplayColumnName(tableName) {
+    const schema = await SchemaService.getTableSchema(tableName);
+    return this.findDisplayColumn(schema);
+  }
+  // ==========================================
 
   // READ ONE - Obtener un registro específico
   static async readOne(tableName, id, include = []) {
@@ -329,27 +399,13 @@ class CrudService {
 
     const foreignSchema = await SchemaService.getTableSchema(fkColumn.foreign_table_name);
     
-   // Logica de verificacion del campo tipo text a mostrar en el select (combobox) 
-    // Buscar columnas que podrían servir como display
-    const displayColumns = foreignSchema.columns.filter(col => 
-      col.column_name.includes('nombre') ||
-      col.column_name.includes('name') ||
-      col.column_name.includes('titulo') ||
-      col.column_name.includes('title') ||
-      col.column_name.includes('descripcion') ||
-      col.column_name.includes('description') ||
-      col.data_type === 'text'
-    );
-
-    // Si no hay columnas de display obvias, usar la primera columna text
-    const displayColumn = displayColumns.length > 0 
-      ? displayColumns[0].column_name 
-      : foreignSchema.columns.find(col => col.data_type === 'text')?.column_name ||
-        foreignSchema.primaryKey;
+    // Usar el nuevo método helper
+    const displayColumn = this.findDisplayColumn(foreignSchema);
 
     const options = await this.read(fkColumn.foreign_table_name, {
       limit: 1000, // Límite alto para opciones
-      orderBy: displayColumn
+      orderBy: displayColumn,
+      autoIncludeForeignKeys: false // No incluir FKs en las opciones
     });
 
     console.log(`✅ Se obtuvieron ${options.data.length} opciones para ${fkColumn.foreign_table_name}`);
