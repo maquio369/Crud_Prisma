@@ -54,6 +54,7 @@ class SchemaService {
     const query = `
       SELECT 
         c.column_name,
+        cm.column_desc, 
         c.data_type,
         c.is_nullable,
         c.column_default,
@@ -98,6 +99,13 @@ class SchemaService {
           AND tc.table_name = $1
           AND tc.table_schema = 'public'
       ) fk ON c.column_name = fk.column_name
+      LEFT JOIN (
+        SELECT 
+          cm.description as column_desc,cm.objsubid
+        FROM pg_description cm
+        JOIN pg_class c ON cm.objoid = c.oid
+        WHERE c.relname = $1 
+      ) cm ON c.ordinal_position = cm.objsubid
       WHERE c.table_name = $1
         AND c.table_schema = 'public'
       ORDER BY c.ordinal_position;

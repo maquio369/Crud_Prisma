@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middlewares (usando Express built-in, NO body-parser)
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'],
+  origin: ['http://localhost:3000', 'http://localhost:3010', 'http://localhost:5173'],
   credentials: true
 }));
 
@@ -32,8 +32,8 @@ app.use((req, res, next) => {
 // Rutas básicas
 app.get('/', (req, res) => {
   res.json({
-    message: 'Dynamic DB Admin API - Sin ORM',
-    version: '1.0.0',
+    message: 'Dynamic DB Admin API',
+    version: '1.0.1',
     status: 'running',
     timestamp: new Date().toISOString()
   });
