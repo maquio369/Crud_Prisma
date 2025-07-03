@@ -19,8 +19,10 @@ const RecordForm = ({
 
   useEffect(() => {
     initializeForm();
-    loadForeignKeyOptions();
-  }, [schema, record]);
+    if (schema && schema.foreignKeys && schema.foreignKeys.length > 0) {
+      loadForeignKeyOptions();
+    }
+  }, [schema, record, tableName]);
 
   const initializeForm = () => {
     const initialData = {};
@@ -54,31 +56,33 @@ const RecordForm = ({
   };
 
   const loadForeignKeyOptions = async () => {
-    const fkColumns = schema.foreignKeys;
-    if (fkColumns.length === 0) return;
+    if (!schema.foreignKeys || schema.foreignKeys.length === 0) {
+      return;
+    }
 
     setLoadingOptions(true);
     const options = {};
 
     try {
-      await Promise.all(
-        fkColumns.map(async (fkColumn) => {
-          try {
-            const response = await apiService.getForeignKeyOptions(
-              tableName, 
-              fkColumn.column_name
-            );
-            options[fkColumn.column_name] = response.data.data.options;
-          } catch (error) {
-            console.error(`Error loading FK options for ${fkColumn.column_name}:`, error);
-            options[fkColumn.column_name] = [];
-          }
-        })
-      );
+      // Cargar opciones para cada foreign key
+      const promises = schema.foreignKeys.map(async (fk) => {
+        try {
+          const response = await apiService.getForeignKeyOptions(tableName, fk.column_name);
+          options[fk.column_name] = response.data.data.options;
+          console.log(`Opciones cargadas para ${fk.column_name}:`, response.data.data.options);
+        } catch (error) {
+          console.error(`Error cargando opciones para ${fk.column_name}:`, error);
+          // Si falla, crear opciones vacías
+          options[fk.column_name] = [];
+        }
+      });
 
+      await Promise.all(promises);
       setForeignKeyOptions(options);
+      
     } catch (error) {
-      console.error('Error loading foreign key options:', error);
+      console.error('Error general cargando opciones FK:', error);
+      // showNotification('Error al cargar opciones de relaciones', 'error');
     } finally {
       setLoadingOptions(false);
     }
@@ -192,7 +196,66 @@ const RecordForm = ({
     return translations[columnName] || columnName.charAt(0).toUpperCase() + columnName.slice(1);
   };
 
-  // 🎯 FUNCIÓN PARA RENDERIZAR CAMPO INDIVIDUAL
+  // 🎯 FUNCIÓN PARA RENDERIZAR CAMPOS DE FOREIGN KEY
+  const renderForeignKeyField = (column, value, error, isRequired, displayName) => {
+    // Si están cargando las opciones, mostrar loading
+  if (loadingOptions) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <div className="flex items-center space-x-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="text-gray-700">Cargando opciones de relaciones...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+      <div className="space-y-2">
+        <label className="block text-sm font-medium text-gray-700">
+          <div className="flex items-center space-x-2">
+            <span className="text-blue-600">🔗</span>
+            <span>{displayName}</span>
+            {isRequired && <span className="text-red-500">*</span>}
+          </div>
+        </label>
+        
+        <select
+          value={value}
+          onChange={(e) => handleInputChange(column.column_name, e.target.value ? parseInt(e.target.value) : '')}
+          className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+            error ? 'border-red-500 bg-red-50' : 'border-gray-300'
+          }`}
+          required={isRequired}
+          disabled={loadingOptions}
+        >
+          <option value="">
+            {loadingOptions ? 'Cargando opciones...' : `-- Seleccione ${displayName} --`}
+          </option>
+          {foreignKeyOptions[column.column_name]?.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        
+        {error && (
+          <p className="text-sm text-red-600 flex items-center space-x-1">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </p>
+        )}
+        
+        <p className="text-xs text-gray-500">
+          Seleccione {displayName.toLowerCase()} de la lista
+        </p>
+      </div>
+    );
+  };
+
+  // 🎯 FUNCIÓN PRINCIPAL ACTUALIZADA PARA RENDERIZAR CAMPOS
   const renderField = (column) => {
     const value = formData[column.column_name] ?? '';
     const error = errors[column.column_name];
@@ -227,96 +290,155 @@ const RecordForm = ({
       );
     }
 
+    // 🚀 NUEVA LÓGICA: Verificar si es foreign key
+    const isForeignKey = schema.foreignKeys?.some(fk => fk.column_name === column.column_name);
+    
+    if (isForeignKey) {
+      return renderForeignKeyField(column, value, error, isRequired, displayName);
+    }
+
+    // Resto de campos normales...
     const baseInputClasses = `w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-      error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300'
+      error ? 'border-red-500 bg-red-50' : 'border-gray-300'
     }`;
+
+    // Boolean field
+    if (column.data_type === 'boolean') {
+      return (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            <div className="flex items-center space-x-2">
+              <span className="text-purple-600">☑️</span>
+              <span>{displayName}</span>
+              {isRequired && <span className="text-red-500">*</span>}
+            </div>
+          </label>
+          <div className="flex items-center space-x-4">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="radio"
+                name={column.column_name}
+                value="true"
+                checked={value === true || value === 'true'}
+                onChange={(e) => handleInputChange(column.column_name, true)}
+                className="text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-green-700">✓ Activo</span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="radio"
+                name={column.column_name}
+                value="false"
+                checked={value === false || value === 'false'}
+                onChange={(e) => handleInputChange(column.column_name, false)}
+                className="text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-red-700">✗ Inactivo</span>
+            </label>
+          </div>
+          {error && (
+            <p className="text-sm text-red-600 flex items-center space-x-1">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // Date/DateTime fields
+    if (column.data_type === 'date' || column.data_type === 'timestamp') {
+      return (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            <div className="flex items-center space-x-2">
+              <span className="text-indigo-600">📅</span>
+              <span>{displayName}</span>
+              {isRequired && <span className="text-red-500">*</span>}
+            </div>
+          </label>
+          <input
+            type={column.data_type === 'date' ? 'date' : 'datetime-local'}
+            value={value}
+            onChange={(e) => handleInputChange(column.column_name, e.target.value)}
+            className={baseInputClasses}
+            required={isRequired}
+          />
+          {error && (
+            <p className="text-sm text-red-600 flex items-center space-x-1">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // Text area for long text fields
+    if (column.character_maximum_length > 200 || 
+        column.column_name.toLowerCase().includes('descripcion') ||
+        column.column_name.toLowerCase().includes('comentario')) {
+      return (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            <div className="flex items-center space-x-2">
+              <span className="text-gray-600">📝</span>
+              <span>{displayName}</span>
+              {isRequired && <span className="text-red-500">*</span>}
+            </div>
+          </label>
+          <textarea
+            value={value}
+            onChange={(e) => handleInputChange(column.column_name, e.target.value)}
+            rows={4}
+            className={baseInputClasses}
+            placeholder={`Ingrese ${displayName.toLowerCase()}...`}
+            required={isRequired}
+          />
+          {error && (
+            <p className="text-sm text-red-600 flex items-center space-x-1">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    // Regular input field
+    const inputType = column.data_type === 'integer' ? 'number' : 
+                     column.column_name.toLowerCase().includes('correo') || 
+                     column.column_name.toLowerCase().includes('email') ? 'email' :
+                     column.column_name.toLowerCase().includes('telefono') ? 'tel' :
+                     column.column_name.toLowerCase().includes('clave') || 
+                     column.column_name.toLowerCase().includes('password') ? 'password' : 'text';
 
     return (
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
           <div className="flex items-center space-x-2">
-            <span>
-              {column.is_foreign_key && <span className="text-purple-600">🔗</span>}
-              <span>{displayName}</span>
+            <span className="text-gray-600">
+              {inputType === 'email' ? '📧' : 
+               inputType === 'tel' ? '📞' : 
+               inputType === 'password' ? '🔒' : 
+               inputType === 'number' ? '🔢' : '📄'}
             </span>
-            {isRequired && <span className="text-red-500 text-lg">*</span>}
+            <span>{displayName}</span>
+            {isRequired && <span className="text-red-500">*</span>}
           </div>
-          <span className="text-xs font-normal text-gray-500 mt-1 block">
-            {column.data_type}
-            {column.character_maximum_length && ` (máx: ${column.character_maximum_length})`}
-            {!isRequired && ' (opcional)'}
-          </span>
         </label>
-
-        {/* Foreign Key Select */}
-        {column.is_foreign_key ? (
-          <select
-            value={value}
-            onChange={(e) => handleInputChange(column.column_name, e.target.value)}
-            className={baseInputClasses}
-            disabled={loadingOptions}
-          >
-            <option value="">
-              {loadingOptions ? 'Cargando opciones...' : `Selecciona ${displayName.toLowerCase()}`}
-            </option>
-            {foreignKeyOptions[column.column_name]?.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        ) : column.data_type === 'boolean' ? (
-          /* Boolean Toggle mejorado */
-          <div className="flex items-center space-x-3">
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={Boolean(value)}
-                onChange={(e) => handleInputChange(column.column_name, e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              <span className="ml-3 text-sm text-gray-700 font-medium">
-                {value ? 'Activo' : 'Inactivo'}
-              </span>
-            </label>
-          </div>
-        ) : column.data_type === 'text' || column.column_name === 'descripcion' ? (
-          /* Text Area for long text */
-          <textarea
-            value={value}
-            onChange={(e) => handleInputChange(column.column_name, e.target.value)}
-            rows={3}
-            className={baseInputClasses}
-            placeholder={`Describe ${displayName.toLowerCase()}...`}
-          />
-        ) : column.column_name === 'clave' ? (
-          /* Password field */
-          <input
-            type="password"
-            value={value}
-            onChange={(e) => handleInputChange(column.column_name, e.target.value)}
-            className={baseInputClasses}
-            placeholder="Ingresa la contraseña..."
-          />
-        ) : (
-          /* Regular Input */
-          <input
-            type={
-              column.data_type === 'integer' ? 'number' : 
-              column.column_name.includes('correo') || column.column_name.includes('email') ? 'email' :
-              column.column_name.includes('telefono') || column.column_name.includes('phone') ? 'tel' :
-              'text'
-            }
-            value={value}
-            onChange={(e) => handleInputChange(column.column_name, e.target.value)}
-            className={baseInputClasses}
-            placeholder={`Ingresa ${displayName.toLowerCase()}...`}
-          />
-        )}
-
+        <input
+          type={inputType}
+          value={value}
+          onChange={(e) => handleInputChange(column.column_name, e.target.value)}
+          className={baseInputClasses}
+          placeholder={`Ingrese ${displayName.toLowerCase()}...`}
+          required={isRequired}
+          min={inputType === 'number' ? 0 : undefined}
+        />
         {error && (
-          <p className="text-red-500 text-xs flex items-center space-x-1">
+          <p className="text-sm text-red-600 flex items-center space-x-1">
             <span>⚠️</span>
             <span>{error}</span>
           </p>

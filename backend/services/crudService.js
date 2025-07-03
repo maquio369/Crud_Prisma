@@ -49,6 +49,11 @@ class CrudService {
   }
 
   // READ - Obtener registros con paginación y filtros (CON AUTO-INCLUDE DE FOREIGN KEYS)
+  // ========== POST-PROCESAMIENTO PARA MOSTRAR NOMBRES EN LUGAR DE IDs ==========
+
+  // backend/services/crudService.js - Sección corregida
+
+  // ========== POST-PROCESAMIENTO PARA MOSTRAR NOMBRES EN LUGAR DE IDs ==========
   static async read(tableName, options = {}) {
     console.log(`📖 Leyendo registros de tabla: ${tableName}`);
     console.log('Opciones:', options);
@@ -60,17 +65,16 @@ class CrudService {
       include = [],
       orderBy = null,
       orderDirection = 'ASC',
-      autoIncludeForeignKeys = true // NUEVA OPCIÓN - por defecto true
+      autoIncludeForeignKeys = true // Por defecto incluir FK automáticamente
     } = options;
 
     const schema = await SchemaService.getTableSchema(tableName);
     const offset = (page - 1) * limit;
     
-    // ========== NUEVA LÓGICA: AUTO-INCLUDE DE TODAS LAS FOREIGN KEYS ==========
+    // Auto-incluir todas las foreign keys
     let finalInclude = [...include];
     
     if (autoIncludeForeignKeys && schema.foreignKeys && schema.foreignKeys.length > 0) {
-      // Agregar automáticamente todas las tablas de foreign keys que no estén ya incluidas
       const autoForeignTables = schema.foreignKeys
         .map(fk => fk.foreign_table_name)
         .filter(tableName => !include.includes(tableName));
@@ -78,14 +82,13 @@ class CrudService {
       finalInclude = [...include, ...autoForeignTables];
       console.log('🔗 Auto-incluyendo foreign keys:', autoForeignTables);
     }
-    // ========================================================================
     
     // Construir WHERE clause para filtros
     let whereConditions = [];
     let params = [];
     let paramCount = 1;
 
-    // Agregar filtro automático para soft delete si existe
+    // Agregar filtro automático para soft delete
     const softDeleteColumn = schema.columns.find(col => 
       col.column_name === 'esta_borrado' || 
       col.column_name === 'deleted' || 
@@ -98,7 +101,7 @@ class CrudService {
       paramCount++;
     }
 
-    // Filtros proporcionados por el usuario
+    // Filtros del usuario
     Object.entries(filters).forEach(([column, value]) => {
       if (value !== null && value !== undefined && value !== '') {
         const columnInfo = schema.columns.find(col => col.column_name === column);
@@ -136,21 +139,17 @@ class CrudService {
             ON ${tableName}.${fkColumn.column_name} = ${alias}.${fkColumn.foreign_column_name}
           `);
           
-          // Obtener columnas de la tabla relacionada
+          // Obtener esquema de la tabla relacionada
           const relatedSchema = await SchemaService.getTableSchema(relation);
           
-          // ========== NUEVA LÓGICA: SOLO INCLUIR COLUMNAS IMPORTANTES ==========
-          // Buscar la columna más importante para mostrar (nombre, título, etc.)
+          // 🎯 ESTA ES LA PARTE CLAVE: Encontrar la columna de display correcta
           const displayColumn = this.findDisplayColumn(relatedSchema);
           
-          // Incluir solo el ID y la columna de display
-          const importantColumns = [
+          // Incluir tanto el ID como la columna de display
+          additionalSelects.push(
             `${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,
             `${alias}.${displayColumn} as ${alias}_${displayColumn}`
-          ];
-          
-          additionalSelects.push(importantColumns.join(', '));
-          // ====================================================================
+          );
         }
       }
 
@@ -160,7 +159,7 @@ class CrudService {
       }
     }
 
-    // Construir ORDER BY
+    // ORDER BY
     let orderByClause = '';
     if (orderBy) {
       const validColumn = schema.columns.find(col => col.column_name === orderBy);
@@ -194,12 +193,12 @@ class CrudService {
       ${whereClause};
     `;
 
-    const countParams = params.slice(0, -2); // Excluir limit y offset
+    const countParams = params.slice(0, -2);
 
     console.log('Query principal:', mainQuery);
     console.log('Parámetros:', params);
 
-    // Ejecutar ambas queries
+    // Ejecutar queries
     const [dataResult, countResult] = await Promise.all([
       executeQuery(mainQuery, params),
       executeQuery(countQuery, countParams)
@@ -208,7 +207,7 @@ class CrudService {
     const total = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(total / limit);
 
-    // ========== NUEVA LÓGICA: POST-PROCESAMIENTO PARA MOSTRAR NOMBRES ==========
+    // 🚀 POST-PROCESAMIENTO: Crear campos _display para cada FK
     const processedData = dataResult.rows.map(row => {
       const processedRow = { ...row };
       
@@ -216,23 +215,27 @@ class CrudService {
       if (autoIncludeForeignKeys && schema.foreignKeys) {
         schema.foreignKeys.forEach(fk => {
           const alias = `${fk.foreign_table_name}_data`;
-          const displayColumnName = `${alias}_${this.findDisplayColumnName(fk.foreign_table_name)}`;
           
-          if (row[displayColumnName]) {
-            // Crear campo virtual: ID_ROL_display = "Administrador"
-            processedRow[`${fk.column_name}_display`] = row[displayColumnName];
+          // Buscar la columna de display en los resultados
+          const displayValue = Object.keys(row).find(key => 
+            key.startsWith(`${alias}_`) && 
+            !key.endsWith(`_${fk.foreign_column_name}`) // No el ID
+          );
+          
+          if (displayValue && row[displayValue]) {
+            // Crear campo virtual: id_rol_display = "Administrador"
+            processedRow[`${fk.column_name}_display`] = row[displayValue];
           }
         });
       }
       
       return processedRow;
     });
-    // ========================================================================
 
     console.log(`✅ Se obtuvieron ${dataResult.rows.length} registros de ${total} totales`);
 
     return {
-      data: processedData, // Retorna datos procesados con nombres legibles
+      data: processedData,
       pagination: {
         page,
         limit,
@@ -244,30 +247,43 @@ class CrudService {
     };
   }
 
-  // ========== NUEVOS MÉTODOS HELPER ==========
+  // ========== MÉTODOS HELPER CORREGIDOS ==========
   static findDisplayColumn(schema) {
-    // Buscar columnas que podrían servir como display
-    const displayColumns = schema.columns.filter(col => 
-      col.column_name.includes('nombre') ||
-      col.column_name.includes('name') ||
-      col.column_name.includes('titulo') ||
-      col.column_name.includes('title') ||
-      col.column_name.includes('descripcion') ||
-      col.column_name.includes('description') ||
-      (col.data_type === 'text' && !col.is_primary_key)
-    );
+    // Prioridades para encontrar la mejor columna de display
+    const priorities = [
+      // Primera prioridad: columnas con "nombre" o "name"
+    
 
-    // Si no hay columnas de display obvias, usar la primera columna text
-    return displayColumns.length > 0 
-      ? displayColumns[0].column_name 
-      : schema.columns.find(col => col.data_type === 'text')?.column_name ||
-        schema.primaryKey;
+      // Cuarta prioridad: columnas específicas comunes
+      col => ['apellido1'].includes(col.column_name.toLowerCase()),
+      
+      // Quinta prioridad: cualquier columna de texto que no sea primary key
+      col => col.data_type === 'text' && !col.is_primary_key,
+      
+      // Última opción: columnas varchar que no sean primary key
+      col => (col.data_type === 'character varying' || col.data_type === 'varchar') && !col.is_primary_key
+    ];
+
+    // Buscar por prioridades
+    for (const priority of priorities) {
+      const found = schema.columns.find(priority);
+      if (found) {
+        console.log(`📝 Columna de display encontrada: ${found.column_name} (${found.data_type})`);
+        return found.column_name;
+      }
+    }
+
+    // Si no encuentra nada, usar la primary key como último recurso
+    console.log('⚠️ No se encontró columna de display apropiada, usando primary key');
+    return schema.primaryKey;
   }
 
   static async findDisplayColumnName(tableName) {
     const schema = await SchemaService.getTableSchema(tableName);
     return this.findDisplayColumn(schema);
   }
+
+ 
   // ==========================================
 
   // READ ONE - Obtener un registro específico

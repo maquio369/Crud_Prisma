@@ -220,100 +220,102 @@ const Dashboard = () => {
     }, 4000);
   };
 
-  const renderCellValue = (value, column, record) => {
-    if (value === null || value === undefined) {
-      return (
-        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-500 italic">
-          null
-        </span>
-      );
-    }
-
-    const foreignKey = schema.foreignKeys?.find(fk => fk.column_name === column.column_name);
+  // 🎯 FUNCIÓN MEJORADA PARA RENDERIZAR VALORES DE CELDAS
+  const renderCellValue = (record, column) => {
+    const value = record[column.column_name];
     
-    if (foreignKey) {
-      const foreignTable = foreignKey.foreign_table_name;
-      const aliasPrefix = `${foreignTable}_data`;
-      
-      const possibleDisplayFields = [
-        `${aliasPrefix}_rol`,
-        `${aliasPrefix}_nombre`,
-        `${aliasPrefix}_name`,
-        `${aliasPrefix}_titulo`,
-        `${aliasPrefix}_title`,
-        `${aliasPrefix}_descripcion`,
-        `${aliasPrefix}_description`
-      ];
-      
-      let displayValue = null;
-      for (const fieldName of possibleDisplayFields) {
-        if (record[fieldName]) {
-          displayValue = record[fieldName];
-          break;
+    // 🚀 NUEVA LÓGICA: Si es FK, mostrar el texto en lugar del ID
+    if (schema.foreignKeys) {
+      const fkColumn = schema.foreignKeys.find(fk => fk.column_name === column.column_name);
+      if (fkColumn) {
+        // Buscar el campo _display correspondiente
+        const displayField = `${column.column_name}_display`;
+        const displayValue = record[displayField];
+        
+        if (displayValue) {
+          return (
+            <div className="flex items-center space-x-2">
+              <span className="text-blue-600 text-xs">🔗</span>
+              <span className="font-medium text-gray-900">{displayValue}</span>
+              <span className="text-xs text-gray-400">#{value}</span>
+            </div>
+          );
         }
       }
-      
-      if (displayValue) {
-        return (
-          <div className="flex items-center space-x-2">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 border border-purple-200">
-              🔗 {displayValue}
-            </span>
-            <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded">
-              ID: {value}
-            </span>
-          </div>
-        );
-      } else {
-        return (
-          <span className="inline-flex items-center px-2 py-1 rounded-md text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-            🔗 ID: {value}
-          </span>
-        );
-      }
     }
-
-    if (column.data_type === 'boolean') {
-      return (
-        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-          value 
-            ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800' 
-            : 'bg-gradient-to-r from-red-100 to-rose-100 text-red-800'
-        }`}>
-          <span className="mr-1">{value ? '✓' : '✗'}</span>
-          {value ? 'true' : 'false'}
+    
+    // Manejar otros tipos de datos
+    if (value === null || value === undefined) {
+      return <span className="text-gray-400 italic">Sin datos</span>;
+    }
+    
+    // Boolean values
+    if (typeof value === 'boolean') {
+      return value ? (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          ✓ Activo
+        </span>
+      ) : (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+          ✗ Inactivo
         </span>
       );
     }
-
+    
+    // Dates
+    if (column.data_type === 'timestamp' || column.data_type === 'date') {
+      return (
+        <span className="text-sm text-gray-600">
+          {new Date(value).toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          })}
+        </span>
+      );
+    }
+    
+    // Email fields
+    if (column.column_name.toLowerCase().includes('correo') || 
+        column.column_name.toLowerCase().includes('email')) {
+      return (
+        <a href={`mailto:${value}`} className="text-blue-600 hover:text-blue-800 underline">
+          {value}
+        </a>
+      );
+    }
+    
+    // Phone fields
+    if (column.column_name.toLowerCase().includes('telefono') || 
+        column.column_name.toLowerCase().includes('phone')) {
+      return (
+        <a href={`tel:${value}`} className="text-green-600 hover:text-green-800">
+          📞 {value}
+        </a>
+      );
+    }
+    
+    // Primary keys
     if (column.is_primary_key) {
       return (
-        <span className="font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
-          {value}
+        <span className="inline-flex items-center space-x-1">
+          <span className="text-yellow-600">🔑</span>
+          <span className="font-mono text-sm font-semibold text-gray-700">{value}</span>
         </span>
       );
     }
-
-    if (column.data_type?.includes('timestamp') || column.data_type?.includes('date')) {
-      try {
-        const date = new Date(value);
-        return (
-          <span className="text-gray-700 text-sm bg-gray-50 px-2 py-1 rounded border">
-            {date.toLocaleDateString('es-ES', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: column.data_type.includes('timestamp') ? '2-digit' : undefined,
-              minute: column.data_type.includes('timestamp') ? '2-digit' : undefined
-            })}
-          </span>
-        );
-      } catch {
-        return <span className="text-gray-900">{String(value)}</span>;
-      }
+    
+    // Long text (truncate)
+    if (typeof value === 'string' && value.length > 50) {
+      return (
+        <span className="text-sm text-gray-700" title={value}>
+          {value.substring(0, 47)}...
+        </span>
+      );
     }
-
-    return <span className="text-gray-900">{String(value)}</span>;
+    
+    // Default
+    return <span className="text-sm text-gray-700">{value}</span>;
   };
 
   const renderTablesList = () => (
@@ -454,9 +456,6 @@ const Dashboard = () => {
                 <span>Agregar</span>
               </button>
               
-              {/* 🚀 BOTÓN ANÁLISIS 2x2 - AGREGADO */}
-          
-              
               <button className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -542,7 +541,6 @@ const Dashboard = () => {
                         );
                       })}
                       
-                      {/* 🚀 COLUMNA DE ACCIONES AGREGADA */}
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Acciones
                       </th>
@@ -560,89 +558,23 @@ const Dashboard = () => {
                           className="hover:bg-gray-50 transition-colors duration-150"
                         >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                            <div className="flex items-center">
-                              <span className="text-blue-600 hover:text-blue-900 cursor-pointer">
-                                {recordId}
-                              </span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-yellow-600">🔑</span>
+                              <span>{recordId}</span>
                             </div>
                           </td>
 
-                          {schema.columns.filter(col => !col.is_primary_key).map((column) => (
-                            <td
-                              key={column.column_name}
-                              className="px-6 py-4 whitespace-nowrap text-sm"
-                            >
-                              {(() => {
-                                const value = record[column.column_name];
-                                
-                                if (value === null || value === undefined) {
-                                  return <span className="text-gray-400 italic">-</span>;
-                                }
-
-                                const foreignKey = schema.foreignKeys?.find(fk => fk.column_name === column.column_name);
-                                if (foreignKey) {
-                                  const foreignTable = foreignKey.foreign_table_name;
-                                  const aliasPrefix = `${foreignTable}_data`;
-                                  
-                                  const possibleDisplayFields = [
-                                    `${aliasPrefix}_rol`,
-                                    `${aliasPrefix}_nombre`,
-                                    `${aliasPrefix}_name`,
-                                    `${aliasPrefix}_titulo`,
-                                    `${aliasPrefix}_title`,
-                                    `${aliasPrefix}_descripcion`,
-                                    `${aliasPrefix}_description`
-                                  ];
-                                  
-                                  let displayValue = null;
-                                  for (const fieldName of possibleDisplayFields) {
-                                    if (record[fieldName]) {
-                                      displayValue = record[fieldName];
-                                      break;
-                                    }
-                                  }
-                                  
-                                  if (displayValue) {
-                                    const getBadgeColor = (value) => {
-                                      if (value === 'Administrador') return 'bg-purple-100 text-purple-800';
-                                      if (value === 'Enlace') return 'bg-blue-100 text-blue-800';
-                                      return 'bg-gray-100 text-gray-800';
-                                    };
-                                    
-                                    return (
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getBadgeColor(displayValue)}`}>
-                                        {displayValue}
-                                      </span>
-                                    );
-                                  } else {
-                                    return <span className="text-gray-500">ID: {value}</span>;
-                                  }
-                                }
-
-                                if (column.data_type === 'boolean') {
-                                  return (
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                      value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                    }`}>
-                                      {value ? 'Activo' : 'Inactivo'}
-                                    </span>
-                                  );
-                                }
-
-                                if (column.column_name === 'clave') {
-                                  return <span className="text-gray-400">••••••••</span>;
-                                }
-
-                                return (
-                                  <span className="text-gray-900">
-                                    {String(value)}
-                                  </span>
-                                );
-                              })()}
-                            </td>
-                          ))}
+                          {schema.columns
+                            .filter(column => !column.is_primary_key)
+                            .map(column => (
+                              <td 
+                                key={column.column_name} 
+                                className="px-6 py-4 whitespace-nowrap text-sm"
+                              >
+                                {renderCellValue(record, column)}
+                              </td>
+                            ))}
                           
-                          {/* 🚀 COLUMNA DE ACCIONES */}
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div className="flex items-center space-x-2">
                               <button 
@@ -905,9 +837,6 @@ const Dashboard = () => {
           </div>
         )}
       </Modal>
-
-
-     
     </div>
   );
 };
