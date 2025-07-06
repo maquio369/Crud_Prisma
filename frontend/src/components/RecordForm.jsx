@@ -260,7 +260,7 @@ const RecordForm = ({
     const value = formData[column.column_name] ?? '';
     const error = errors[column.column_name];
     const isRequired = column.is_nullable === 'NO' && !column.column_default;
-    const displayName = getColumnDisplayName(column.column_name);
+    const displayName =column.column_desc?column.column_desc: getColumnDisplayName(column.column_name);
     
     // Skip auto-increment primary keys
     if (column.is_primary_key && column.column_default?.includes('nextval')) {

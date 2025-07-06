@@ -133,7 +133,7 @@ class CrudService {
         );
         
         if (fkColumn) {
-          const alias = `${relation}_data`;
+          const alias = `${relation}`;//_data
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
             ON ${tableName}.${fkColumn.column_name} = ${alias}.${fkColumn.foreign_column_name}
@@ -144,11 +144,11 @@ class CrudService {
           
           // 🎯 ESTA ES LA PARTE CLAVE: Encontrar la columna de display correcta
           const displayColumn = this.findDisplayColumn(relatedSchema);
-          
+          const fkColumnDesc=fkColumn.foreign_column_desc? fkColumn.foreign_column_desc : `${alias}.${displayColumn}`;
           // Incluir tanto el ID como la columna de display
           additionalSelects.push(
             `${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,
-            `${alias}.${displayColumn} as ${alias}_${displayColumn}`
+            `${fkColumnDesc} as ${alias}_${displayColumn}`
           );
         }
       }
@@ -214,7 +214,7 @@ class CrudService {
       // Para cada foreign key, crear un campo virtual con el nombre legible
       if (autoIncludeForeignKeys && schema.foreignKeys) {
         schema.foreignKeys.forEach(fk => {
-          const alias = `${fk.foreign_table_name}_data`;
+          const alias = `${fk.foreign_table_name}`;//_data
           
           // Buscar la columna de display en los resultados
           const displayValue = Object.keys(row).find(key => 
@@ -245,6 +245,19 @@ class CrudService {
         hasPrev: page > 1
       }
     };
+  }
+
+  static async getOptionsList(foreign_column_name, foreign_column_desc, foreign_table_name) {
+    console.log(`📜 get Options List: ${foreign_table_name}`);
+    const mainQuery = `
+      SELECT ${foreign_column_name} as optionvalue, trim(${foreign_column_desc}) as optiontext 
+      FROM ${foreign_table_name} 
+      WHERE esta_borrado='false' ORDER BY optionText ASC 
+      LIMIT 1976;
+    `;
+    const r = await executeQuery(mainQuery);    
+    console.log(`💬 get Options List ${foreign_table_name}[${r.rows.length}]:`, r.rows);
+    return r.rows;    
   }
 
   // ========== MÉTODOS HELPER CORREGIDOS ==========
@@ -404,36 +417,39 @@ class CrudService {
 
   // Obtener opciones para campos de foreign key
   static async getForeignKeyOptions(tableName, columnName) {
-    console.log(`🔗 Obteniendo opciones para FK: ${tableName}.${columnName}`);
-    
+    console.log(`🔗🔗 Obteniendo opciones para FK: ${tableName}.${columnName}`);
+    // usuarios . id_empleado
     const schema = await SchemaService.getTableSchema(tableName);
     const fkColumn = schema.foreignKeys.find(fk => fk.column_name === columnName);
     
     if (!fkColumn) {
       throw new Error(`La columna ${columnName} no es una foreign key`);
     }
-
+    console.log(`🏴‍☠️🏴‍☠️🏴‍☠️ Obteniendo opciones para FK: ${fkColumn.foreign_column_desc}-${fkColumn.column_desc}`);
+    console.log(`🏴‍☠️🏴‍☠️🏴‍☠️ Obteniendo opciones para FK: ${fkColumn.foreign_table_name}-${fkColumn.foreign_column_desc}-${fkColumn.foreign_column_name}`);
+    // empleados -undefined- id_empleado
     const foreignSchema = await SchemaService.getTableSchema(fkColumn.foreign_table_name);
     
     // Usar el nuevo método helper
-    const displayColumn = this.findDisplayColumn(foreignSchema);
-
-    const options = await this.read(fkColumn.foreign_table_name, {
+    const displayColumn = fkColumn.foreign_column_desc? fkColumn.foreign_column_desc : this.findDisplayColumn(foreignSchema);
+    //const displayColumn = this.findDisplayColumn(foreignSchema);
+    const options = await this.getOptionsList(fkColumn.foreign_column_name, displayColumn, fkColumn.foreign_table_name);
+    /*const options = await this.read(fkColumn.foreign_table_name, {
       limit: 1000, // Límite alto para opciones
       orderBy: displayColumn,
       autoIncludeForeignKeys: false // No incluir FKs en las opciones
-    });
+    });*/
 
-    console.log(`✅ Se obtuvieron ${options.data.length} opciones para ${fkColumn.foreign_table_name}`);
+    console.log(`💬✅ opciones para ${fkColumn.foreign_table_name}[${options.length}]`,options);
 
     return {
-      options: options.data.map(item => ({
-        value: item[fkColumn.foreign_column_name],
-        label: item[displayColumn] || item[fkColumn.foreign_column_name],
+      options: options.map(item => ({        
+        value: item["optionvalue"],
+        label: item["optiontext"] || item[fkColumn.foreign_column_name],
         data: item
       })),
       displayColumn,
-      valueColumn: fkColumn.foreign_column_name
+      valueColumn: "value"
     };
   }
 }
