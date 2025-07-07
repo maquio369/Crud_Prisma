@@ -133,7 +133,8 @@ class CrudService {
         );
         
         if (fkColumn) {
-          const alias = `${relation}`;//_data
+          //sin _data para las referencias FK de otras entidades
+          const alias = `${tableName===relation?relation+"_data":relation}`;//_data necesario para la autoreferencia
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
             ON ${tableName}.${fkColumn.column_name} = ${alias}.${fkColumn.foreign_column_name}
