@@ -14,6 +14,7 @@ RUN npm ci
 COPY . .
 
 # Crear variables de entorno para el build
+
 ENV VITE_BACKEND_URL=http://dynamic-db-backend:3001
 ENV VITE_BACKEND_HEALTH_URL=http://dynamic-db-backend:3001/health
 # Construir la aplicación
