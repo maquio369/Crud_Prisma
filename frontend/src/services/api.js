@@ -153,7 +153,7 @@ export const apiService = {
 
   // Método para verificar la salud del backend
   healthCheck: () => {
-    const healthUrl = import.meta.env.VITE_BACKEND_HEALTH_URL || 'http://localhost:3001/health';
+    const healthUrl = import.meta.env.VITE_BACKEND_HEALTH_URL || 'http://dynamic-db-backend:3001/health';
     return axios.get(healthUrl, { timeout: 5000 });
   },
 
