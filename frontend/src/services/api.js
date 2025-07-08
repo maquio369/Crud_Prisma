@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // Configuración desde variables de entorno
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://172.16.35.75:3013/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://dynamic-db-backend:3001/api';
 const CONNECTION_TIMEOUT = parseInt(import.meta.env.VITE_CONNECTION_TIMEOUT) || 10000;
 const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
