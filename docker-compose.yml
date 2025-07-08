@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
     container_name: dynamic-db-backend
     ports:
-      - "3001:3001"
+      - "3013:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
@@ -31,7 +31,7 @@ services:
       dockerfile: Dockerfile
     container_name: dynamic-db-frontend
     ports:
-      - "3000:80"
+      - "3014:80"
     depends_on:
       - backend
     restart: unless-stopped
