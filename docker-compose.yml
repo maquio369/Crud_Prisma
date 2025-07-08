@@ -33,10 +33,10 @@ services:
     ports:
       - "3014:80"
     environment:
-      # Variables de entorno para el frontend
-      - VITE_BACKEND_URL=http://dynamic-db-backend:3001
-      - VITE_BACKEND_HEALTH_URL=http://dynamic-db-backend:3001/health
-      - VITE_API_BASE_URL=http://dynamic-db-backend:3001/api
+      # Variables de entorno para el frontend (usando IPs externas)
+      - VITE_BACKEND_URL=http://172.16.35.75:3013
+      - VITE_BACKEND_HEALTH_URL=http://172.16.35.75:3013/health
+      - VITE_API_BASE_URL=http://172.16.35.75:3013/api
     depends_on:
       - backend
     restart: unless-stopped
