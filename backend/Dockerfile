@@ -1,6 +1,9 @@
 # Dockerfile para Backend (Node.js + Express + PostgreSQL)
 FROM node:18-alpine
 
+# Instalar curl para health checks
+RUN apk add --no-cache curl
+
 # Establecer directorio de trabajo
 WORKDIR /app
 
