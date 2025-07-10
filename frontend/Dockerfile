@@ -15,9 +15,9 @@ COPY . .
 
 # Crear variables de entorno para el build
 
-ENV VITE_BACKEND_URL=http://172.16.35.75:3013
-ENV VITE_BACKEND_HEALTH_URL=http://172.16.35.75:3013/health
-ENV VITE_API_BASE_URL=http://172.16.35.75:3013/api
+ENV VITE_BACKEND_URL=
+ENV VITE_BACKEND_HEALTH_URL=/health
+ENV VITE_API_BASE_URL=/api
 # Construir la aplicación
 RUN npm run build
 
