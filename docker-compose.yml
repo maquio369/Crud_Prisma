@@ -25,27 +25,23 @@ services:
       start_period: 40s
 
   # Frontend React
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: dynamic-db-frontend
-    ports:
-      - "3014:80"
-    environment:
-      # Variables de entorno para el frontend (usando IPs externas)
-      - VITE_BACKEND_URL=http://localhost:3014
-      - VITE_BACKEND_HEALTH_URL=http://localhost:3014/health
-      - VITE_API_BASE_URL=http://localhost:3014/api
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - dynamic-db-network
-
-networks:
-  dynamic-db-network:
-    driver: bridge
+frontend:
+  build:
+    context: ./frontend
+    dockerfile: Dockerfile
+  container_name: dynamic-db-frontend
+  ports:
+    - "3014:80"
+  environment:
+    # ✅ NUEVAS variables usando rutas relativas
+    - VITE_BACKEND_URL=
+    - VITE_BACKEND_HEALTH_URL=/health
+    - VITE_API_BASE_URL=/api
+  depends_on:
+    - backend
+  restart: unless-stopped
+  networks:
+    - dynamic-db-network
 
 # Volúmenes opcionales para persistencia
 volumes:
