@@ -145,7 +145,7 @@ function App() {
             </button>
             
             <button
-              onClick={() => window.open('http://localhost:3001/health', '_blank')}
+              onClick={() => window.open(`${import.meta.env.VITE_BACKEND_HEALTH_URL}`, '_blank')}
               className="btn-secondary flex items-center justify-center space-x-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
