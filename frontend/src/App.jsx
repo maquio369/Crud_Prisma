@@ -22,7 +22,7 @@ function App() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch('http://localhost:3001/health', {
+      const response = await fetch('/health', {
         signal: controller.signal
       });
       
@@ -66,7 +66,7 @@ function App() {
           
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-700">
-              <span className="font-medium">Endpoint:</span> http://localhost:3001
+              <span className="font-medium">Endpoint:</span> /health
             </p>
             {retryCount > 0 && (
               <p className="text-sm text-blue-600 mt-1">
