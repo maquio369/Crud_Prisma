@@ -66,6 +66,10 @@ class SchemaService {
           WHEN pk.column_name IS NOT NULL THEN true 
           ELSE false 
         END as is_primary_key,
+		    CASE
+          WHEN attidentity='d' OR attidentity='a' THEN true 
+          ELSE false 
+        END as is_identity,	
         CASE 
           WHEN fk.column_name IS NOT NULL THEN true 
           ELSE false 
@@ -84,6 +88,13 @@ class SchemaService {
           AND tc.table_name = $1
           AND tc.table_schema = 'public'
       ) pk ON c.column_name = pk.column_name
+      LEFT JOIN (
+        SELECT attidentity,attname
+        FROM pg_attribute att 
+		    JOIN pg_class cl ON attrelid = cl.oid 
+        WHERE cl.relname = 'roles'
+        AND attnum>0          
+      ) pk_identity ON c.column_name = attname 
       LEFT JOIN (
         SELECT 
           kcu.column_name,
