@@ -19,9 +19,8 @@ class CrudService {
                       data[col.column_name] !== '';
       
       // Excluir primary key si es serial/autoincrement
-      const isAutoIncrement = col.is_primary_key && 
-                             col.column_default && 
-                             col.column_default.includes('nextval');
+      const isAutoIncrement = col.is_primary_key && col.is_identity;console.log('🅰️ isAutoIncrement: ',isAutoIncrement)
+                             /* col.column_default && col.column_default.includes('nextval');*/
       
       return hasValue && !isAutoIncrement;
     });

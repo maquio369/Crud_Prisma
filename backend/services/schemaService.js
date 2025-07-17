@@ -92,7 +92,7 @@ class SchemaService {
         SELECT attidentity,attname
         FROM pg_attribute att 
 		    JOIN pg_class cl ON attrelid = cl.oid 
-        WHERE cl.relname = 'roles'
+        WHERE cl.relname = $1
         AND attnum>0          
       ) pk_identity ON c.column_name = attname 
       LEFT JOIN (
