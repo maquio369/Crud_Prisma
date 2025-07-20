@@ -105,13 +105,13 @@ export const apiService = {
   },
   
   getRecord: (tableName, id, params = {}) => {
-    if (!id) throw new Error('ID is required');
+    if (!id) throw new Error('ID es requerido');
     return api.get(`/tables/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, { params });
   },
   
   createRecord: (tableName, data) => {
     if (!data || typeof data !== 'object') {
-      throw new Error('Valid data object is required');
+      throw new Error('Se requieren datos válidos');
     }
     return api.post(`/tables/${encodeURIComponent(tableName)}`, data);
   },
@@ -119,13 +119,13 @@ export const apiService = {
   updateRecord: (tableName, id, data) => {
     if (!id) throw new Error('ID is required');
     if (!data || typeof data !== 'object') {
-      throw new Error('Valid data object is required');
+      throw new Error('Se requieren datos válidos');
     }
     return api.put(`/tables/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, data);
   },
   
   deleteRecord: (tableName, id) => {
-    if (!id) throw new Error('ID is required');
+    if (!id) throw new Error('ID es requerido');
     return api.delete(`/tables/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`);
   },
   
@@ -139,14 +139,14 @@ export const apiService = {
   
   validateData: (tableName, data) => {
     if (!data || typeof data !== 'object') {
-      throw new Error('Valid data object is required');
+      throw new Error('Se requieren datos válidos');
     }
     return api.post(`/tables/${encodeURIComponent(tableName)}/validate`, data);
   },
   
   searchRecords: (tableName, searchData) => {
     if (!searchData || typeof searchData !== 'object') {
-      throw new Error('Valid search data is required');
+      throw new Error('Se requieren datos de búsqueda válidos');
     }
     return api.post(`/tables/${encodeURIComponent(tableName)}/search`, searchData);
   },
