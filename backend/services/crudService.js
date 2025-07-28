@@ -132,8 +132,8 @@ class CrudService {
         );
         
         if (fkColumn) {
-          //sin _data para las referencias FK de otras entidades
-          const alias = `${tableName===relation?relation+"_data":relation}`;//_data necesario para la autoreferencia
+          //sin _autoref para las referencias FK de otras entidades
+          const alias = `${tableName===relation?relation+"_autoref":relation}`;//_autoref necesario para la autoreferencia
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
             ON ${tableName}.${fkColumn.column_name} = ${alias}.${fkColumn.foreign_column_name}
@@ -147,8 +147,9 @@ class CrudService {
           const fkColumnDesc=fkColumn.foreign_column_desc? fkColumn.foreign_column_desc : `${alias}.${displayColumn}`;
           // Incluir tanto el ID como la columna de display
           additionalSelects.push(
-            `${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,
-            `${fkColumnDesc} as ${alias}_${displayColumn}`
+            /*`${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,*/
+            /*`${fkColumnDesc} as ${alias}_${displayColumn}`*/
+            `${fkColumnDesc} as ${fkColumn.column_name}_display`
           );
         }
       }
@@ -207,6 +208,8 @@ class CrudService {
     const total = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(total / limit);
 
+    const processedData = dataResult.rows
+    /*
     // 🚀 POST-PROCESAMIENTO: Crear campos _display para cada FK
     const processedData = dataResult.rows.map(row => {
       const processedRow = { ...row };
@@ -214,11 +217,11 @@ class CrudService {
       // Para cada foreign key, crear un campo virtual con el nombre legible
       if (autoIncludeForeignKeys && schema.foreignKeys) {
         schema.foreignKeys.forEach(fk => {
-          const alias = `${fk.foreign_table_name}`;//_data
+          //const alias = `${fk.foreign_table_name}`;//_data
           
           // Buscar la columna de display en los resultados
           const displayValue = Object.keys(row).find(key => 
-            key.startsWith(`${alias}_`) && 
+            key.startsWith(`${fk.foreign_table_name}_`) && //key.startsWith(`${alias}_`) && 
             !key.endsWith(`_${fk.foreign_column_name}`) // No el ID
           );
           
@@ -231,7 +234,8 @@ class CrudService {
       
       return processedRow;
     });
-
+*/
+    
     console.log(`✅ Se obtuvieron ${dataResult.rows.length} registros de ${total} totales`);
 
     return {
