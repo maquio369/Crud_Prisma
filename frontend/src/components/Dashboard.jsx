@@ -73,83 +73,171 @@ const Dashboard = () => {
     }
   };
 
-  // 🚀 FUNCIÓN PARA APLICAR FILTROS INTELIGENTES
-  const handleApplyFilters = async (smartFilterData) => {
-    try {
-      setLoading(true);
-      setSmartFilters(smartFilterData);
+// 🚀 FUNCIÓN CORREGIDA PARA APLICAR FILTROS
+const handleApplyFilters = async (filterData) => {
+  try {
+    setLoading(true);
+    console.log('🔍 Aplicando filtros:', filterData);
+    
+    // Detectar el formato del filtro
+    let processedFilters = {};
+    let activeCount = 0;
+
+    // Formato del FormStyleFiltersModal: { filters: {...}, connectors: [...] }
+    if (filterData.filters && typeof filterData.filters === 'object') {
+      console.log('📋 Procesando formato FormStyleFiltersModal');
       
-      // Contar filtros activos
-      const activeCount = Object.keys(smartFilterData).length;
-      setActiveFiltersCount(activeCount);
-
-      // Construir parámetros para el backend
-      const params = {
-        page: '1', // Resetear a primera página al filtrar
-        limit: '50'
-      };
-
-      // Convertir filtros inteligentes al formato que espera el backend
-      if (activeCount > 0) {
-        // Convertir a formato simple para mantener compatibilidad
-        Object.entries(smartFilterData).forEach(([field, config]) => {
-          if (config.operator === 'BETWEEN' && config.value) {
-            const [min, max] = config.value.split(',');
-            if (min && max) {
-              params[`${field}_min`] = min.trim();
-              params[`${field}_max`] = max.trim();
-            }
-          } else if (['IS_NULL', 'IS_NOT_NULL'].includes(config.operator)) {
-            params[`${field}_${config.operator.toLowerCase()}`] = 'true';
-          } else {
-            // Para operadores simples
-            if (config.operator === 'LIKE') {
-              params[field] = config.value; // El backend ya maneja LIKE automáticamente para texto
-            } else {
-              params[`${field}_${config.operator}`] = config.value;
-            }
+      Object.entries(filterData.filters).forEach(([fieldName, filterConfig]) => {
+        const { operator, value, value2 } = filterConfig;
+        
+        if (value && value.trim() !== '') {
+          console.log(`🔧 Aplicando filtro: ${fieldName} ${operator} "${value}"`);
+          
+          switch (operator) {
+            case 'like':
+              // Para LIKE, enviar directamente el valor (el backend ya maneja el ILIKE)
+              processedFilters[fieldName] = value;
+              break;
+              
+            case '=':
+              processedFilters[fieldName] = value;
+              break;
+              
+            case '!=':
+              processedFilters[`${fieldName}_not_equal`] = value;
+              break;
+              
+            case '>':
+              processedFilters[`${fieldName}_gt`] = value;
+              break;
+              
+            case '<':
+              processedFilters[`${fieldName}_lt`] = value;
+              break;
+              
+            case '>=':
+              processedFilters[`${fieldName}_gte`] = value;
+              break;
+              
+            case '<=':
+              processedFilters[`${fieldName}_lte`] = value;
+              break;
+              
+            case 'between':
+              if (value.includes(' - ')) {
+                const [min, max] = value.split(' - ');
+                if (min && max) {
+                  processedFilters[`${fieldName}_gte`] = min.trim();
+                  processedFilters[`${fieldName}_lte`] = max.trim();
+                }
+              }
+              break;
+              
+            case 'M':
+              // Para filtro de mes
+              processedFilters[`${fieldName}_month`] = value;
+              break;
+              
+            default:
+              // Para operadores no reconocidos, usar valor directo
+              processedFilters[fieldName] = value;
+              break;
           }
-        });
-      }
-
-      const response = await apiService.getRecords(selectedTable, params);
-      console.log('Smart filter response:', response); // Debug
-      
-      // Extraer los datos correctamente según la estructura de respuesta
-      let recordsData, paginationData;
-      
-      if (response.data && response.data.data) {
-        recordsData = response.data.data;
-        paginationData = response.data.pagination;
-      } else if (response.data) {
-        recordsData = response.data;
-        paginationData = response.pagination;
-      } else {
-        recordsData = response;
-        paginationData = {};
-      }
-      
-      // Asegurar que recordsData es un array
-      if (!Array.isArray(recordsData)) {
-        console.warn('Smart filtered records data is not an array:', recordsData);
-        recordsData = [];
-      }
-
-      setRecords(recordsData);
-      setPagination(paginationData || {});
-      
-      // Mostrar mensaje de filtros aplicados
-      if (activeCount > 0) {
-        console.log(`✅ Se aplicaron ${activeCount} filtro(s) inteligente(s), encontrados ${recordsData.length} registros`);
-      }
-    } catch (error) {
-      console.error('Error al aplicar filtros inteligentes:', error);
-      setRecords([]);
-      setPagination({});
-    } finally {
-      setLoading(false);
+          
+          activeCount++;
+        }
+      });
     }
-  };
+    // Formato de otros modales (SmartFiltersModal, AdvancedFilterModal)
+    else if (typeof filterData === 'object' && !filterData.filters) {
+      console.log('📋 Procesando formato SmartFiltersModal');
+      
+      Object.entries(filterData).forEach(([fieldName, config]) => {
+        if (config.value && config.value.trim() !== '') {
+          switch (config.operator) {
+            case 'LIKE':
+              processedFilters[fieldName] = config.value;
+              break;
+            case 'BETWEEN':
+              if (config.value.includes(',')) {
+                const [min, max] = config.value.split(',');
+                if (min && max) {
+                  processedFilters[`${fieldName}_gte`] = min.trim();
+                  processedFilters[`${fieldName}_lte`] = max.trim();
+                }
+              }
+              break;
+            case 'IS_NULL':
+              processedFilters[`${fieldName}_is_null`] = 'true';
+              break;
+            case 'IS_NOT_NULL':
+              processedFilters[`${fieldName}_is_not_null`] = 'true';
+              break;
+            default:
+              processedFilters[`${fieldName}_${config.operator.toLowerCase()}`] = config.value;
+              break;
+          }
+          activeCount++;
+        }
+      });
+    }
+
+    // Actualizar estado de filtros
+    setCurrentFilters(processedFilters);
+    setActiveFiltersCount(activeCount);
+
+    // Construir parámetros para el backend
+    const params = {
+      page: '1', // Resetear a primera página al filtrar
+      limit: '50',
+      ...processedFilters
+    };
+
+    console.log('🚀 Parámetros enviados al backend:', params);
+
+    const response = await apiService.getRecords(selectedTable, params);
+    console.log('📊 Respuesta del filtro:', response);
+    
+    // Extraer los datos correctamente según la estructura de respuesta
+    let recordsData, paginationData;
+    
+    if (response.data && response.data.data) {
+      recordsData = response.data.data;
+      paginationData = response.data.pagination;
+    } else if (response.data) {
+      recordsData = response.data;
+      paginationData = response.pagination;
+    } else {
+      recordsData = response;
+      paginationData = {};
+    }
+    
+    // Asegurar que recordsData es un array
+    if (!Array.isArray(recordsData)) {
+      console.warn('Records data is not an array:', recordsData);
+      recordsData = [];
+    }
+
+    setRecords(recordsData);
+    setPagination(paginationData || {});
+    
+    // Mostrar mensaje de filtros aplicados
+    if (activeCount > 0) {
+      console.log(`✅ Se aplicaron ${activeCount} filtro(s), encontrados ${recordsData.length} registros`);
+    }
+  } catch (error) {
+    console.error('❌ Error al aplicar filtros:', error);
+    setRecords([]);
+    setPagination({});
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
+
+
 
   // Función para limpiar filtros
   const handleClearAllFilters = () => {

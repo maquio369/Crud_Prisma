@@ -1,3 +1,4 @@
+// frontend/src/components/FormStyleFiltersModal.jsx
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 
@@ -25,22 +26,36 @@ const FormStyleFiltersModal = ({
       return;
     }
 
+    console.log('🔍 DEBUG - Schema recibido:', {
+      tableName: schema.tableName,
+      totalColumns: schema.columns.length,
+      columns: schema.columns
+    });
+
     const initialFilters = {};
     const filterableColumns = getFilterableColumns();
 
+    console.log(`🔍 DEBUG - ${filterableColumns.length} columnas filtrables encontradas`);
+
     filterableColumns.forEach((column, index) => {
-      // Verificar que la columna tenga las propiedades necesarias
-      if (!column || !column.column_name || !column.data_type) {
+      // Validación más robusta
+      if (!column || !column.column_name) {
         console.warn('Columna inválida encontrada:', column);
         return;
       }
 
+      // Usar data_type con fallback
+      const dataType = column.data_type || 'text';
+
       initialFilters[column.column_name] = {
-        operator: getDefaultOperator(column.data_type),
+        operator: getDefaultOperator(dataType),
         value: '',
-        value2: '', // Para rangos de fecha
-        connector: index < filterableColumns.length - 1 ? 'AND' : null, // Último campo no tiene connector
-        column: column
+        value2: '', 
+        connector: index < filterableColumns.length - 1 ? 'AND' : null,
+        column: {
+          ...column,
+          data_type: dataType // Asegurar que data_type esté definido
+        }
       };
     });
 
@@ -62,51 +77,89 @@ const FormStyleFiltersModal = ({
         return 'like';
       case 'date':
       case 'timestamp':
-        return '=';
+      case 'datetime':
+      case 'timestamp without time zone':
+      case 'timestamp with time zone':
+        return '='; // Por defecto "igual a" para fechas
       default:
         return '=';
     }
   };
 
-  // Obtener operadores disponibles por tipo
+  // Obtener operadores disponibles por tipo - MEJORADO con mejor presentación
   const getOperators = (dataType) => {
     if (!dataType) {
-      // Operadores por defecto si no hay data_type
       return [
-        { value: '=', label: '=', title: 'Igual a' },
-        { value: 'like', label: '≈', title: 'Contiene' },
-        { value: '!=', label: '≠', title: 'Diferente de' }
+        { value: '=', label: '= Igual a', icon: '🟰' },
+        { value: 'like', label: '≈ Contiene', icon: '🔍' },
+        { value: '!=', label: '≠ Diferente de', icon: '🚫' }
       ];
     }
 
-    if (dataType === 'date' || dataType === 'timestamp') {
+    // 🗓 OPERADORES ESPECIALES PARA FECHAS
+    if (dataType === 'date' || dataType === 'timestamp' || dataType === 'datetime' || 
+        dataType === 'timestamp without time zone' || dataType === 'timestamp with time zone') {
       return [
-        { value: 'M', label: '🗓', title: 'Mes de' },
-        { value: 'between', label: '//', title: 'Entre las fechas de' },
-        { value: '=', label: '=', title: 'Igual a' }
+        { value: 'M', label: '🗓 Mes de', icon: '📅', title: 'Filtrar por mes específico' },
+        { value: 'between', label: '// Entre fechas', icon: '📊', title: 'Rango de fechas' },
+        { value: '=', label: '= Igual a', icon: '🟰', title: 'Fecha exacta' },
+        { value: '>=', label: '≥ Desde', icon: '⬆️', title: 'Desde esta fecha en adelante' },
+        { value: '<=', label: '≤ Hasta', icon: '⬇️', title: 'Hasta esta fecha' }
       ];
     }
 
-    // Para campos generales
+    // Operadores para números
+    if (dataType === 'integer' || dataType === 'numeric') {
+      return [
+        { value: '=', label: '= Igual a', icon: '🟰' },
+        { value: '!=', label: '≠ Diferente de', icon: '🚫' },
+        { value: '>', label: '> Mayor que', icon: '⬆️' },
+        { value: '<', label: '< Menor que', icon: '⬇️' },
+        { value: '>=', label: '≥ Mayor o igual', icon: '⤴️' },
+        { value: '<=', label: '≤ Menor o igual', icon: '⤵️' }
+      ];
+    }
+
+    // Operadores para texto
     return [
-      { value: '=', label: '=', title: 'Igual a' },
-      { value: 'like', label: '≈', title: 'Contiene' },
-      { value: '!=', label: '≠', title: 'Diferente de' },
-      { value: '>=', label: '≥', title: 'Mayor o igual que' },
-      { value: '<=', label: '≤', title: 'Menor o igual que' }
+      { value: '=', label: '= Igual a', icon: '🟰' },
+      { value: 'like', label: '≈ Contiene', icon: '🔍' },
+      { value: '!=', label: '≠ Diferente de', icon: '🚫' },
+      { value: '>=', label: '≥ Mayor o igual', icon: '⤴️' },
+      { value: '<=', label: '≤ Menor o igual', icon: '⤵️' }
     ];
   };
 
   // Obtener las columnas filtrables
   const getFilterableColumns = () => {
-    if (!schema || !schema.columns) return [];
+    if (!schema || !schema.columns) {
+      console.warn('Schema o columns no disponible');
+      return [];
+    }
     
     return schema.columns.filter(col => {
+      // Validación básica de columna
+      if (!col || !col.column_name) {
+        console.warn('Columna sin column_name:', col);
+        return false;
+      }
+
       if (col.is_primary_key) return false;
+      
       const systemColumns = ['created_at', 'updated_at', 'fecha_creacion', 'fecha_actualizacion'];
       if (systemColumns.includes(col.column_name)) return false;
-      const filterableTypes = ['text', 'varchar', 'character varying', 'integer', 'numeric', 'boolean', 'date', 'timestamp'];
-      return filterableTypes.includes(col.data_type);
+      
+      // ✅ AGREGADO: timestamp without time zone
+      const dataType = col.data_type || 'text';
+      const filterableTypes = [
+        'text', 'varchar', 'character varying', 
+        'integer', 'numeric', 'boolean', 
+        'date', 'timestamp', 'datetime',
+        'timestamp without time zone',
+        'timestamp with time zone'
+      ];
+      
+      return filterableTypes.includes(dataType);
     });
   };
 
@@ -149,99 +202,110 @@ const FormStyleFiltersModal = ({
     setActiveFiltersCount(count);
   };
 
-  // Renderizar input dinámico según operador
-  const renderDynamicInput = (fieldName, filter) => {
-    if (!filter || !filter.column) {
-      return (
-        <input
-          type="text"
-          value=""
-          disabled
-          placeholder="Error: columna no válida"
-          className="px-3 py-2 border border-red-300 rounded-lg bg-red-50 text-red-500 text-sm flex-1"
-        />
-      );
-    }
+  // Renderizar input dinámico según operador - ✨ MEJORADO PARA FECHAS
+  const renderValueInput = (fieldName, filter) => {
+    const column = filter.column || {};
+    const operator = filter.operator || '=';
+    const value = filter.value || '';
+    const dataType = column.data_type || 'text';
 
-    const { operator, value, value2, column } = filter;
-    const isDate = column.data_type === 'date' || column.data_type === 'timestamp';
+    // 🗓 CAMPOS DE FECHA - Lógica especial
+    const isDateField = ['date', 'timestamp', 'datetime', 'timestamp without time zone', 'timestamp with time zone'].includes(dataType);
 
-    if (isDate) {
+    if (isDateField) {
       switch (operator) {
-        case 'M': // Mes
+        case 'M': // Mes específico
+          const meses = [
+            { value: '01', label: 'Enero' },
+            { value: '02', label: 'Febrero' },
+            { value: '03', label: 'Marzo' },
+            { value: '04', label: 'Abril' },
+            { value: '05', label: 'Mayo' },
+            { value: '06', label: 'Junio' },
+            { value: '07', label: 'Julio' },
+            { value: '08', label: 'Agosto' },
+            { value: '09', label: 'Septiembre' },
+            { value: '10', label: 'Octubre' },
+            { value: '11', label: 'Noviembre' },
+            { value: '12', label: 'Diciembre' }
+          ];
+
           return (
-            <select
-              value={value}
-              onChange={(e) => updateFilter(fieldName, { value: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            >
-              <option value="">Seleccionar mes...</option>
-              <option value="01">Enero</option>
-              <option value="02">Febrero</option>
-              <option value="03">Marzo</option>
-              <option value="04">Abril</option>
-              <option value="05">Mayo</option>
-              <option value="06">Junio</option>
-              <option value="07">Julio</option>
-              <option value="08">Agosto</option>
-              <option value="09">Septiembre</option>
-              <option value="10">Octubre</option>
-              <option value="11">Noviembre</option>
-              <option value="12">Diciembre</option>
-            </select>
+            <div className="flex items-center space-x-2 flex-1">
+              <select
+                value={value}
+                onChange={(e) => updateFilter(fieldName, { value: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm flex-1"
+              >
+                <option value="">Seleccionar mes...</option>
+                {meses.map(mes => (
+                  <option key={mes.value} value={mes.value}>
+                    {mes.label}
+                  </option>
+                ))}
+              </select>
+              <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                📅 {value ? meses.find(m => m.value === value)?.label || 'Mes' : 'Mes'}
+              </div>
+            </div>
           );
 
-        case 'between': // Entre fechas
+        case 'between': // Rango de fechas
+          const values = value ? value.split(' - ') : ['', ''];
           return (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-1">
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-500 mb-1">Desde:</label>
+                <input
+                  type="date"
+                  value={values[0] || ''}
+                  onChange={(e) => updateFilter(fieldName, { 
+                    value: `${e.target.value} - ${values[1] || ''}` 
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+              <div className="flex items-center justify-center mt-5">
+                <span className="text-gray-400 text-sm font-bold">→</span>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-xs text-gray-500 mb-1">Hasta:</label>
+                <input
+                  type="date"
+                  value={values[1] || ''}
+                  onChange={(e) => updateFilter(fieldName, { 
+                    value: `${values[0] || ''} - ${e.target.value}` 
+                  })}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+            </div>
+          );
+
+        case '=': // Fecha exacta
+        case '>=': // Desde fecha
+        case '<=': // Hasta fecha
+        default:
+          return (
+            <div className="flex items-center space-x-2 flex-1">
               <input
                 type="date"
                 value={value}
                 onChange={(e) => updateFilter(fieldName, { value: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                style={{ width: '140px' }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm flex-1"
               />
-              <span className="text-gray-500">-</span>
-              <input
-                type="date"
-                value={value2}
-                onChange={(e) => updateFilter(fieldName, { value2: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                style={{ width: '140px' }}
-              />
+              <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                {operator === '=' ? '📅 Exacta' : 
+                 operator === '>=' ? '📅 Desde' : 
+                 operator === '<=' ? '📅 Hasta' : '📅'}
+              </div>
             </div>
-          );
-
-        case '=': // Fecha específica
-          return (
-            <input
-              type="date"
-              value={value}
-              onChange={(e) => updateFilter(fieldName, { value: e.target.value })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              style={{ width: '140px' }}
-            />
           );
       }
     }
 
-    // Para campos generales
-    if (column.data_type === 'boolean') {
-      return (
-        <select
-          value={value}
-          onChange={(e) => updateFilter(fieldName, { value: e.target.value })}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-        >
-          <option value="">Seleccionar...</option>
-          <option value="true">Verdadero</option>
-          <option value="false">Falso</option>
-        </select>
-      );
-    }
-
-    // Input por defecto
-    const inputType = (column.data_type === 'integer' || column.data_type === 'numeric') ? 'number' : 'text';
+    // 🔢 CAMPOS NUMÉRICOS
+    const inputType = dataType === 'integer' || dataType === 'numeric' ? 'number' : 'text';
     
     return (
       <input
@@ -267,7 +331,6 @@ const FormStyleFiltersModal = ({
           value2: filter.value2 || null
         };
 
-        // Agregar connector si no es el último campo
         if (filter.connector) {
           connectors.push({
             field: fieldName,
@@ -314,7 +377,7 @@ const FormStyleFiltersModal = ({
       isOpen={isOpen}
       onClose={onClose}
       title={`🔍 Filtros de Búsqueda - ${tableName}`}
-      size="lg"
+      size="xl"
     >
       <div className="space-y-6">
         {/* Header */}
@@ -326,7 +389,7 @@ const FormStyleFiltersModal = ({
             <div>
               <h4 className="font-semibold text-gray-900">Filtrar Registros</h4>
               <p className="text-sm text-gray-600">
-                Llena los campos que deseas usar para filtrar. Los campos vacíos se ignoran.
+                Configura los filtros para cada campo. Los campos vacíos se ignoran.
               </p>
             </div>
           </div>
@@ -337,75 +400,87 @@ const FormStyleFiltersModal = ({
           )}
         </div>
 
-        {/* Formulario de filtros */}
-        <div className="max-h-96 overflow-y-auto space-y-4">
+        {/* Encabezados de columnas */}
+        <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-50 rounded-lg border">
+          <div className="col-span-3 text-sm font-medium text-gray-700">Campo</div>
+          <div className="col-span-3 text-sm font-medium text-gray-700">Operador</div>
+          <div className="col-span-4 text-sm font-medium text-gray-700">Valor</div>
+          <div className="col-span-2 text-sm font-medium text-gray-700">Unir con</div>
+        </div>
+
+        {/* Lista de filtros */}
+        <div className="max-h-96 overflow-y-auto space-y-3">
           {filterableColumns.length > 0 ? (
             filterableColumns.map((column, index) => {
               if (!column || !column.column_name) {
-                return null; // Saltar columnas inválidas
+                return null;
               }
 
               const fieldName = column.column_name;
               const filter = filters[fieldName] || {};
-              const operators = getOperators(column.data_type);
+              const operators = getOperators(column.data_type || 'text');
               const hasValue = filter.value && filter.value.trim() !== '';
               const isLastField = index === filterableColumns.length - 1;
 
               return (
                 <div 
                   key={fieldName}
-                  className={`p-4 border rounded-lg transition-all duration-200 ${
-                    hasValue ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'
+                  className={`grid grid-cols-12 gap-4 p-4 border rounded-lg transition-all duration-200 ${
+                    hasValue ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
                   }`}
                 >
-                  {/* Label del campo */}
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    <div className="flex items-center space-x-2">
-                      <span>{getColumnDisplayName(fieldName)}</span>
-                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {column.data_type || 'unknown'}
+                  {/* Nombre del Campo */}
+                  <div className="col-span-3 flex items-center">
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-gray-900">
+                        {getColumnDisplayName(fieldName)}
                       </span>
-                      {schema.foreignKeys?.some(fk => fk.column_name === fieldName) && (
-                        <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded">
-                          🔗 FK
+                      <div className="flex items-center space-x-1 mt-1">
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {column.data_type || 'text'}
                         </span>
-                      )}
+                        {schema.foreignKeys?.some(fk => fk.column_name === fieldName) && (
+                          <span className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded">
+                            🔗 FK
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </label>
+                  </div>
 
-                  {/* Fila de filtro */}
-                  <div className="flex items-center space-x-3">
-                    {/* Selector de operador */}
+                  {/* Selector de Operador */}
+                  <div className="col-span-3 flex items-center">
                     <select
-                      value={filter.operator || getDefaultOperator(column.data_type)}
+                      value={filter.operator || getDefaultOperator(column.data_type || 'text')}
                       onChange={(e) => updateFilter(fieldName, { operator: e.target.value, value: '', value2: '' })}
-                      className="border-0 bg-transparent text-teal-600 font-bold text-lg focus:ring-0 focus:outline-none cursor-pointer"
-                      style={{ appearance: 'none' }}
-                      title={operators.find(op => op.value === (filter.operator || getDefaultOperator(column.data_type)))?.title}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
                     >
                       {operators.map(op => (
-                        <option key={op.value} value={op.value} title={op.title}>
+                        <option key={op.value} value={op.value}>
                           {op.label}
                         </option>
                       ))}
                     </select>
+                  </div>
 
-                    {/* Input dinámico */}
-                    <div className="flex-1">
-                      {renderDynamicInput(fieldName, filter)}
-                    </div>
+                  {/* Input de Valor */}
+                  <div className="col-span-4 flex items-center">
+                    {renderValueInput(fieldName, filter)}
+                  </div>
 
-                    {/* Selector Y/O (excepto para el último campo) */}
-                    {!isLastField && (
+                  {/* Selector AND/OR */}
+                  <div className="col-span-2 flex items-center">
+                    {!isLastField ? (
                       <select
                         value={filter.connector || 'AND'}
                         onChange={(e) => updateFilter(fieldName, { connector: e.target.value })}
-                        className="border-0 bg-transparent text-teal-600 font-bold focus:ring-0 focus:outline-none cursor-pointer"
-                        style={{ appearance: 'none' }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm bg-white"
                       >
-                        <option value="AND">Y</option>
-                        <option value="OR">O</option>
+                        <option value="AND">🔗 Y (AND)</option>
+                        <option value="OR">🔄 O (OR)</option>
                       </select>
+                    ) : (
+                      <span className="text-sm text-gray-400 italic">Final</span>
                     )}
                   </div>
                 </div>
@@ -413,32 +488,32 @@ const FormStyleFiltersModal = ({
             })
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <span className="text-2xl mb-2 block">📭</span>
+              <span className="text-4xl mb-2 block">📋</span>
               <p>No hay campos filtrables disponibles</p>
             </div>
           )}
         </div>
 
-        {/* Preview de filtros activos */}
+        {/* Vista previa de filtros activos */}
         {activeFiltersCount > 0 && (
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <h5 className="font-medium text-gray-900 mb-2">Vista previa de filtros:</h5>
-            <div className="space-y-1">
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <h5 className="font-medium text-green-900 mb-2">Filtros activos:</h5>
+            <div className="flex flex-wrap gap-2">
               {Object.entries(filters)
                 .filter(([_, filter]) => filter.value && filter.value.trim() !== '')
                 .map(([fieldName, filter], index, array) => (
-                  <div key={fieldName} className="text-sm">
-                    <span className="font-medium text-blue-600">{getColumnDisplayName(fieldName)}</span>
-                    <span className="text-gray-500 mx-2">
-                      {getOperators(filter.column.data_type).find(op => op.value === filter.operator)?.title}
-                    </span>
-                    <span className="text-gray-700">
-                      {filter.operator === 'between' ? 
-                        `${filter.value} a ${filter.value2}` : 
+                  <div key={fieldName} className="flex items-center">
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">
+                      <strong>{getColumnDisplayName(fieldName)}</strong> {
+                        getOperators(filter.column?.data_type || 'text').find(op => op.value === filter.operator)?.label || filter.operator
+                      } <em>{
+                        filter.operator === 'between' ? 
+                        `${filter.value}` : 
                         filter.value}
+                      </em>
                     </span>
                     {index < array.length - 1 && (
-                      <span className="text-teal-600 font-bold ml-2">
+                      <span className="text-green-600 font-bold mx-2">
                         {filter.connector === 'OR' ? 'O' : 'Y'}
                       </span>
                     )}
