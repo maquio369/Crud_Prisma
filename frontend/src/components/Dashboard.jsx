@@ -1,11 +1,12 @@
-// src/components/Dashboard.jsx - Versión completa con Modal 2x2
+// src/components/Dashboard.jsx - Código completo con sistema de filtros
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import Modal from './Modal';
 import RecordForm from './RecordForm';
+import FormStyleFiltersModal from './FormStyleFiltersModal';
 
 const Dashboard = () => {
-  const [tables, setTables] = useState([]);
+  const [tables, setTables] = useState([]); // Inicializar como array vacío
   const [selectedTable, setSelectedTable] = useState(null);
   const [records, setRecords] = useState([]);
   const [schema, setSchema] = useState(null);
@@ -20,131 +21,291 @@ const Dashboard = () => {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [crudLoading, setCrudLoading] = useState(false);
   
-  // 🚀 NUEVO: Estados para el modal 2x2
-  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
-  const [analyticsData, setAnalyticsData] = useState(null);
+  // Estados para filtros inteligentes
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [currentFilters, setCurrentFilters] = useState({});
+  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
+  const [smartFilters, setSmartFilters] = useState({}); // 🚀 NUEVO: Para almacenar filtros inteligentes
 
   // Cargar tablas al montar el componente
   useEffect(() => {
     loadTables();
   }, []);
 
-  // 🚀 FUNCIÓN PARA CARGAR DATOS ANALÍTICOS
-  const loadAnalyticsData = async (tableName) => {
-    try {
-      // Simular carga de datos analíticos
-      const mockData = {
-        tableName,
-        totalRecords: pagination.total || 0,
-        columnsCount: schema?.columns?.length || 0,
-        lastModified: new Date().toISOString(),
-        relations: schema?.foreignKeys?.length || 0,
-        indexes: schema?.columns?.filter(col => col.is_primary_key)?.length || 0,
-        recentActivity: [
-          { action: 'CREATE', user: 'Admin', timestamp: new Date(Date.now() - 1000 * 60 * 2) },
-          { action: 'UPDATE', user: 'User123', timestamp: new Date(Date.now() - 1000 * 60 * 15) },
-          { action: 'DELETE', user: 'Admin', timestamp: new Date(Date.now() - 1000 * 60 * 60) }
-        ]
-      };
-      setAnalyticsData(mockData);
-      setShowAnalyticsModal(true);
-    } catch (error) {
-      showNotification('Error al cargar análisis: ' + error.message, 'error');
-    }
-  };
-
   const loadTables = async () => {
     try {
       setLoading(true);
+      console.log('📊 Cargando listado de tablas...');
+      
       const response = await apiService.getTables();
-      setTables(response.data.data);
-      setError(null);
-    } catch (err) {
-      setError('Error al cargar las tablas: ' + err.message);
-      console.error('Error loading tables:', err);
+      console.log('Response from API:', response); // Debug
+      
+      // Extraer los datos correctamente según la estructura de respuesta
+      let tablesData;
+      if (response.data && response.data.data) {
+        // Si la respuesta tiene estructura { data: { data: [...] } }
+        tablesData = response.data.data;
+      } else if (response.data) {
+        // Si la respuesta tiene estructura { data: [...] }
+        tablesData = response.data;
+      } else if (Array.isArray(response)) {
+        // Si la respuesta es directamente un array
+        tablesData = response;
+      } else {
+        // Fallback
+        tablesData = [];
+      }
+      
+      // Asegurar que tablesData es un array
+      if (!Array.isArray(tablesData)) {
+        console.warn('Tables data is not an array:', tablesData);
+        tablesData = [];
+      }
+      
+      setTables(tablesData);
+      console.log(`✅ Se cargaron ${tablesData.length} tablas`);
+    } catch (error) {
+      console.error('Error loading tables:', error);
+      setError('Error al cargar las tablas: ' + error.message);
+      setTables([]); // Asegurar que tables sea un array vacío en caso de error
     } finally {
       setLoading(false);
     }
   };
 
-  const selectTable = async (tableName) => {
+  // 🚀 FUNCIÓN PARA APLICAR FILTROS INTELIGENTES
+  const handleApplyFilters = async (smartFilterData) => {
     try {
       setLoading(true);
-      setSelectedTable(tableName);
+      setSmartFilters(smartFilterData);
       
-      const [schemaResponse, recordsResponse] = await Promise.all([
-        apiService.getTableSchema(tableName),
-        apiService.getRecords(tableName, { limit: 50 })
-      ]);
+      // Contar filtros activos
+      const activeCount = Object.keys(smartFilterData).length;
+      setActiveFiltersCount(activeCount);
+
+      // Construir parámetros para el backend
+      const params = {
+        page: '1', // Resetear a primera página al filtrar
+        limit: '50'
+      };
+
+      // Convertir filtros inteligentes al formato que espera el backend
+      if (activeCount > 0) {
+        // Convertir a formato simple para mantener compatibilidad
+        Object.entries(smartFilterData).forEach(([field, config]) => {
+          if (config.operator === 'BETWEEN' && config.value) {
+            const [min, max] = config.value.split(',');
+            if (min && max) {
+              params[`${field}_min`] = min.trim();
+              params[`${field}_max`] = max.trim();
+            }
+          } else if (['IS_NULL', 'IS_NOT_NULL'].includes(config.operator)) {
+            params[`${field}_${config.operator.toLowerCase()}`] = 'true';
+          } else {
+            // Para operadores simples
+            if (config.operator === 'LIKE') {
+              params[field] = config.value; // El backend ya maneja LIKE automáticamente para texto
+            } else {
+              params[`${field}_${config.operator}`] = config.value;
+            }
+          }
+        });
+      }
+
+      const response = await apiService.getRecords(selectedTable, params);
+      console.log('Smart filter response:', response); // Debug
       
-      setSchema(schemaResponse.data.data);
-      setRecords(recordsResponse.data.data);
-      setPagination(recordsResponse.data.pagination);
+      // Extraer los datos correctamente según la estructura de respuesta
+      let recordsData, paginationData;
       
-      console.log('✅ Tabla cargada:', tableName);
-      console.log('📊 Registros con FK resueltas:', recordsResponse.data.data);
+      if (response.data && response.data.data) {
+        recordsData = response.data.data;
+        paginationData = response.data.pagination;
+      } else if (response.data) {
+        recordsData = response.data;
+        paginationData = response.pagination;
+      } else {
+        recordsData = response;
+        paginationData = {};
+      }
       
-      setError(null);
-    } catch (err) {
-      setError('Error al cargar la tabla: ' + err.message);
-      console.error('Error loading table:', err);
+      // Asegurar que recordsData es un array
+      if (!Array.isArray(recordsData)) {
+        console.warn('Smart filtered records data is not an array:', recordsData);
+        recordsData = [];
+      }
+
+      setRecords(recordsData);
+      setPagination(paginationData || {});
+      
+      // Mostrar mensaje de filtros aplicados
+      if (activeCount > 0) {
+        console.log(`✅ Se aplicaron ${activeCount} filtro(s) inteligente(s), encontrados ${recordsData.length} registros`);
+      }
+    } catch (error) {
+      console.error('Error al aplicar filtros inteligentes:', error);
+      setRecords([]);
+      setPagination({});
     } finally {
       setLoading(false);
     }
   };
 
-  const loadPage = async (page) => {
-    if (!selectedTable) return;
+  // Función para limpiar filtros
+  const handleClearAllFilters = () => {
+    setCurrentFilters({});
+    setActiveFiltersCount(0);
+    fetchRecords(selectedTable, 1); // Recargar datos sin filtros
+  };
+
+  const fetchSchema = async (table) => {
+    try {
+      console.log(`📋 Obteniendo schema de ${table}...`);
+      const response = await apiService.getTableSchema(table);
+      console.log('Schema response:', response); // Debug
+      
+      // Extraer los datos correctamente según la estructura de respuesta
+      let schemaData;
+      if (response.data && response.data.data) {
+        schemaData = response.data.data;
+      } else if (response.data) {
+        schemaData = response.data;
+      } else {
+        schemaData = response;
+      }
+      
+      setSchema(schemaData);
+      console.log(`✅ Schema de ${table} cargado, columnas:`, schemaData.columns?.length || 0);
+    } catch (error) {
+      console.error('Error fetching schema:', error);
+      setSchema(null);
+    }
+  };
+
+  // Función modificada para mantener filtros al cambiar de página
+  const fetchRecords = async (table, page = 1, maintainFilters = false) => {
+    if (!table) return;
     
     try {
       setLoading(true);
-      const response = await apiService.getRecords(selectedTable, { 
-        page, 
-        limit: pagination.limit,
-      });
+      console.log(`📖 Cargando registros de ${table}, página ${page}`);
       
-      setRecords(response.data.data);
-      setPagination(response.data.pagination);
+      // Mantener filtros actuales si se especifica
+      const filters = maintainFilters ? currentFilters : {};
       
-    } catch (err) {
-      setError('Error al cargar la página: ' + err.message);
+      // Construir parámetros
+      const params = {
+        page: page.toString(),
+        limit: '50',
+        ...filters
+      };
+
+      const response = await apiService.getRecords(table, params);
+      console.log('Records response:', response); // Debug
+      
+      // Extraer los datos correctamente según la estructura de respuesta
+      let recordsData, paginationData;
+      
+      if (response.data && response.data.data) {
+        recordsData = response.data.data;
+        paginationData = response.data.pagination;
+      } else if (response.data) {
+        recordsData = response.data;
+        paginationData = response.pagination;
+      } else {
+        recordsData = response;
+        paginationData = {};
+      }
+      
+      // Asegurar que recordsData es un array
+      if (!Array.isArray(recordsData)) {
+        console.warn('Records data is not an array:', recordsData);
+        recordsData = [];
+      }
+
+      setRecords(recordsData);
+      setPagination(paginationData || {});
+      
+      console.log(`✅ Se cargaron ${recordsData.length} registros de ${table}`);
+    } catch (error) {
+      console.error('Error fetching records:', error);
+      setRecords([]);
+      setPagination({});
     } finally {
       setLoading(false);
     }
   };
 
-  // CRUD Operations
-  const handleCreateRecord = async (data) => {
+  // Función modificada para limpiar filtros al cambiar de tabla
+  const handleTableSelect = (table) => {
+    setSelectedTable(table);
+    setRecords([]);
+    setPagination({});
+    setCurrentFilters({}); // Limpiar filtros
+    setActiveFiltersCount(0); // Resetear contador
+    fetchSchema(table);
+    fetchRecords(table, 1);
+  };
+
+  // Función para manejar acciones CRUD
+  const handleCreateRecord = async (formData) => {
     try {
       setCrudLoading(true);
-      await apiService.createRecord(selectedTable, data);
+      console.log('📝 Creando nuevo registro:', formData);
       
-      await selectTable(selectedTable);
+      const response = await apiService.createRecord(selectedTable, formData);
+      console.log('Create response:', response); // Debug
+      
+      // Extraer el nuevo registro
+      let newRecord;
+      if (response.data && response.data.data) {
+        newRecord = response.data.data;
+      } else if (response.data) {
+        newRecord = response.data;
+      } else {
+        newRecord = response;
+      }
+      
+      console.log('✅ Registro creado exitosamente:', newRecord);
+      
       setShowCreateModal(false);
+      fetchRecords(selectedTable, 1, true); // Mantener filtros al refrescar
       
-      showNotification('Registro creado exitosamente', 'success');
-    } catch (err) {
-      showNotification('Error al crear registro: ' + (err.response?.data?.message || err.message), 'error');
+    } catch (error) {
+      console.error('❌ Error al crear registro:', error);
+      alert('Error al crear el registro: ' + (error.response?.data?.message || error.message));
     } finally {
       setCrudLoading(false);
     }
   };
 
-  const handleEditRecord = async (data) => {
+  const handleEditRecord = async (formData) => {
     try {
       setCrudLoading(true);
-      const primaryKey = schema.primaryKey;
-      const recordId = selectedRecord[primaryKey];
+      console.log('📝 Editando registro:', formData);
       
-      await apiService.updateRecord(selectedTable, recordId, data);
+      const response = await apiService.updateRecord(selectedTable, selectedRecord[schema.primaryKey], formData);
+      console.log('Update response:', response); // Debug
       
-      await selectTable(selectedTable);
+      // Extraer el registro actualizado
+      let updatedRecord;
+      if (response.data && response.data.data) {
+        updatedRecord = response.data.data;
+      } else if (response.data) {
+        updatedRecord = response.data;
+      } else {
+        updatedRecord = response;
+      }
+      
+      console.log('✅ Registro actualizado exitosamente:', updatedRecord);
+      
       setShowEditModal(false);
       setSelectedRecord(null);
+      fetchRecords(selectedTable, pagination.currentPage || 1, true); // Mantener filtros
       
-      showNotification('Registro actualizado exitosamente', 'success');
-    } catch (err) {
-      showNotification('Error al actualizar registro: ' + (err.response?.data?.message || err.message), 'error');
+    } catch (error) {
+      console.error('❌ Error al actualizar registro:', error);
+      alert('Error al actualizar el registro: ' + (error.response?.data?.message || error.message));
     } finally {
       setCrudLoading(false);
     }
@@ -153,74 +314,36 @@ const Dashboard = () => {
   const handleDeleteRecord = async () => {
     try {
       setCrudLoading(true);
-      const primaryKey = schema.primaryKey;
-      const recordId = selectedRecord[primaryKey];
+      console.log('🗑️ Eliminando registro ID:', selectedRecord[schema.primaryKey]);
       
-      await apiService.deleteRecord(selectedTable, recordId);
+      const response = await apiService.deleteRecord(selectedTable, selectedRecord[schema.primaryKey]);
+      console.log('Delete response:', response); // Debug
       
-      await selectTable(selectedTable);
+      console.log('✅ Registro eliminado exitosamente');
+      
       setShowDeleteModal(false);
       setSelectedRecord(null);
+      fetchRecords(selectedTable, pagination.currentPage || 1, true); // Mantener filtros
       
-      showNotification('Registro eliminado exitosamente', 'success');
-    } catch (err) {
-      showNotification('Error al eliminar registro: ' + (err.response?.data?.message || err.message), 'error');
+    } catch (error) {
+      console.error('❌ Error al eliminar registro:', error);
+      alert('Error al eliminar el registro: ' + (error.response?.data?.message || error.message));
     } finally {
       setCrudLoading(false);
     }
   };
 
-  const openEditModal = (record) => {
+  const handleEditClick = (record) => {
     setSelectedRecord(record);
     setShowEditModal(true);
   };
 
-  const openDeleteModal = (record) => {
+  const handleDeleteClick = (record) => {
     setSelectedRecord(record);
     setShowDeleteModal(true);
   };
 
-  const showNotification = (message, type) => {
-    const notification = document.createElement('div');
-    notification.className = `fixed top-6 right-6 p-4 rounded-xl shadow-2xl z-50 transform transition-all duration-500 ease-out ${
-      type === 'success' 
-        ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white' 
-        : 'bg-gradient-to-r from-red-500 to-rose-600 text-white'
-    } max-w-sm backdrop-blur-sm border border-white/20`;
-    
-    notification.innerHTML = `
-      <div class="flex items-center space-x-3">
-        <div class="flex-shrink-0">
-          <div class="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-            ${type === 'success' ? '✓' : '✕'}
-          </div>
-        </div>
-        <div class="flex-1 font-medium">${message}</div>
-      </div>
-    `;
-    
-    notification.style.transform = 'translateX(100%) scale(0.8)';
-    notification.style.opacity = '0';
-    
-    document.body.appendChild(notification);
-    
-    requestAnimationFrame(() => {
-      notification.style.transform = 'translateX(0) scale(1)';
-      notification.style.opacity = '1';
-    });
-    
-    setTimeout(() => {
-      notification.style.transform = 'translateX(100%) scale(0.8)';
-      notification.style.opacity = '0';
-      setTimeout(() => {
-        if (document.body.contains(notification)) {
-          document.body.removeChild(notification);
-        }
-      }, 500);
-    }, 4000);
-  };
-
-  // 🎯 FUNCIÓN MEJORADA PARA RENDERIZAR VALORES DE CELDAS
+  // 🎯 FUNCIÓN MEJORADA PARA RENDERIZAR VALORES DE CELDAS (como en tu código original)
   const renderCellValue = (record, column) => {
     const value = record[column.column_name];
     
@@ -318,90 +441,118 @@ const Dashboard = () => {
     return <span className="text-sm text-gray-700">{value}</span>;
   };
 
+  const getColumnDisplayName = (columnName) => {
+    const translations = {
+      'nombres': 'Nombre',
+      'apellidos': 'Apellidos', 
+      'correo': 'Correo',
+      'usuario': 'Usuario',
+      'id_rol': 'Rol',
+      'rol': 'Rol',
+      'esta_borrado': 'Estado',
+      'descripcion': 'Descripción',
+      'activo': 'Activo',
+      'estado': 'Estado',
+      'telefono': 'Teléfono',
+      'direccion': 'Dirección',
+      'fecha_nacimiento': 'Fecha de Nacimiento',
+      'salario': 'Salario',
+      'departamento': 'Departamento',
+      'cargo': 'Cargo',
+      'codigo': 'Código',
+      'nombre': 'Nombre',
+      'precio': 'Precio',
+      'cantidad': 'Cantidad',
+      'categoria': 'Categoría'
+    };
+    
+    return translations[columnName] || 
+           columnName.charAt(0).toUpperCase() + 
+           columnName.slice(1).replace(/_/g, ' ');
+  };
+
   const renderTablesList = () => (
     <div className="w-80 bg-gradient-to-br from-slate-50 to-gray-100 border-r border-gray-200/60 backdrop-blur-sm">
       <div className="p-6 border-b border-gray-200/60 bg-white/50">
         <h2 className="text-xl font-bold text-gray-800 flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm">📊</span>
+            <span className="text-white font-bold text-sm">📊</span>
           </div>
           <span>Tablas</span>
         </h2>
-        <p className="text-sm text-gray-500 mt-1">{tables.length} tablas disponibles</p>
+        <p className="text-sm text-gray-600 mt-1">
+          {Array.isArray(tables) ? tables.length : 0} tablas disponibles
+        </p>
       </div>
-      
-      <div className="p-4 h-full overflow-y-auto">
-        {loading && !selectedTable && (
-          <div className="flex items-center justify-center p-8">
-            <div className="relative">
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-200"></div>
-              <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-t-transparent absolute top-0 left-0"></div>
-            </div>
-          </div>
-        )}
-        
-        <div className="space-y-3">
-          {tables.map((table) => (
-            <div
-              key={table.table_name}
-              onClick={() => selectTable(table.table_name)}
-              className={`group relative p-4 rounded-xl cursor-pointer transition-all duration-200 transform hover:scale-[1.02] ${
-                selectedTable === table.table_name
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-xl shadow-blue-500/25'
-                  : 'bg-white/80 backdrop-blur-sm border border-gray-200/60 hover:bg-white hover:shadow-lg hover:border-blue-200'
-              }`}
-            >
-              <div className={`absolute inset-0 rounded-xl transition-opacity duration-200 ${
-                selectedTable === table.table_name 
-                  ? 'bg-gradient-to-r from-white/20 to-transparent opacity-100' 
-                  : 'opacity-0 group-hover:opacity-100 bg-gradient-to-r from-blue-50 to-transparent'
-              }`}></div>
-              
-              <div className="relative">
-                <div className={`font-semibold text-lg mb-2 ${
-                  selectedTable === table.table_name ? 'text-white' : 'text-gray-900'
-                }`}>
-                  {table.table_name}
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className={`flex items-center space-x-1 ${
-                    selectedTable === table.table_name ? 'text-blue-100' : 'text-gray-600'
-                  }`}>
-                    <span className="w-4 h-4 flex items-center justify-center">📈</span>
-                    <span>{table.totalRecords || 0}</span>
-                  </div>
-                  <div className={`flex items-center space-x-1 ${
-                    selectedTable === table.table_name ? 'text-blue-100' : 'text-gray-600'
-                  }`}>
-                    <span className="w-4 h-4 flex items-center justify-center">🏗️</span>
-                    <span>{table.columnsCount || 0}</span>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-1 mt-3">
-                  {table.hasSoftDelete && (
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      selectedTable === table.table_name 
-                        ? 'bg-green-400/20 text-green-100' 
-                        : 'bg-green-100 text-green-700'
+
+      <div className="p-4">
+        <div className="space-y-2">
+          {Array.isArray(tables) && tables.length > 0 ? (
+            tables.map((table) => (
+              <div
+                key={table.table_name}
+                onClick={() => handleTableSelect(table.table_name)}
+                className={`relative cursor-pointer transition-all duration-300 rounded-xl overflow-hidden ${
+                  selectedTable === table.table_name
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/25 transform scale-105'
+                    : 'bg-white/80 backdrop-blur-sm hover:bg-white hover:shadow-md border border-gray-200/60'
+                }`}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className={`font-semibold text-sm ${
+                      selectedTable === table.table_name ? 'text-white' : 'text-gray-900'
                     }`}>
-                      🛡️ Soft Delete
-                    </span>
-                  )}
-                  {table.hasRelations && (
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      selectedTable === table.table_name 
-                        ? 'bg-purple-400/20 text-purple-100' 
-                        : 'bg-purple-100 text-purple-700'
+                      📋 {table.table_name}
+                    </h3>
+                  </div>
+                  
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <div className={`flex items-center space-x-1 ${
+                      selectedTable === table.table_name ? 'text-blue-100' : 'text-gray-600'
                     }`}>
-                      🔗 Relaciones
-                    </span>
-                  )}
+                      <span className="w-4 h-4 flex items-center justify-center">📈</span>
+                      <span>{table.totalRecords || 0}</span>
+                    </div>
+                    <div className={`flex items-center space-x-1 ${
+                      selectedTable === table.table_name ? 'text-blue-100' : 'text-gray-600'
+                    }`}>
+                      <span className="w-4 h-4 flex items-center justify-center">🏗️</span>
+                      <span>{table.columnsCount || 0}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {table.hasSoftDelete && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        selectedTable === table.table_name 
+                          ? 'bg-green-400/20 text-green-100' 
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        🛡️ Soft Delete
+                      </span>
+                    )}
+                    {table.hasRelations && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        selectedTable === table.table_name 
+                          ? 'bg-purple-400/20 text-purple-100' 
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        🔗 Relaciones
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <span className="text-2xl mb-2 block">📊</span>
+              <p className="text-sm">
+                {loading ? 'Cargando tablas...' : 'No hay tablas disponibles'}
+              </p>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
@@ -456,11 +607,24 @@ const Dashboard = () => {
                 <span>Agregar</span>
               </button>
               
-              <button className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium">
+              {/* 🚀 BOTÓN FILTROS INTELIGENTES ACTUALIZADO */}
+              <button 
+                onClick={() => setShowFilterModal(true)}
+                className={`flex items-center space-x-2 border transition-colors duration-200 text-sm font-medium px-4 py-2 rounded-lg ${
+                  activeFiltersCount > 0
+                    ? 'border-green-500 bg-green-50 text-green-700 hover:bg-green-100'
+                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700'
+                }`}
+              >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
                 </svg>
-                <span>Buscar</span>
+                <span>Filtros Inteligentes</span>
+                {activeFiltersCount > 0 && (
+                  <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full min-w-[20px] h-5 flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
+                )}
               </button>
               
               <button className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium">
@@ -477,6 +641,36 @@ const Dashboard = () => {
               </button>
             </div>
           </div>
+
+          {/* 🚀 INDICADOR DE FILTROS INTELIGENTES ACTIVOS */}
+          {activeFiltersCount > 0 && (
+            <div className="flex items-center space-x-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg mt-4">
+              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm text-green-700">
+                {activeFiltersCount} filtro{activeFiltersCount !== 1 ? 's' : ''} inteligente{activeFiltersCount !== 1 ? 's' : ''} aplicado{activeFiltersCount !== 1 ? 's' : ''}
+              </span>
+              <div className="flex items-center space-x-1">
+                {Object.entries(smartFilters).slice(0, 3).map(([field, config]) => (
+                  <span key={field} className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                    {field}
+                  </span>
+                ))}
+                {Object.keys(smartFilters).length > 3 && (
+                  <span className="text-xs text-green-600">
+                    +{Object.keys(smartFilters).length - 3} más
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleClearAllFilters}
+                className="text-xs text-green-600 hover:text-green-800 underline"
+              >
+                Limpiar
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Contenido */}
@@ -494,14 +688,29 @@ const Dashboard = () => {
                 <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">📭</span>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No hay registros</h3>
-                <p className="text-gray-600 mb-4">Esta tabla no contiene datos</p>
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 font-medium"
-                >
-                  Crear primer registro
-                </button>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {activeFiltersCount > 0 ? 'No se encontraron registros' : 'No hay registros'}
+                </h3>
+                <p className="text-gray-600 mb-4">
+                  {activeFiltersCount > 0 
+                    ? 'Intenta ajustar los filtros inteligentes o limpiarlos para ver más resultados'
+                    : 'Esta tabla no contiene datos'
+                  }</p>
+                {activeFiltersCount > 0 ? (
+                  <button
+                    onClick={handleClearAllFilters}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 font-medium"
+                  >
+                    Limpiar filtros inteligentes
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 font-medium"
+                  >
+                    Crear primer registro
+                  </button>
+                )}
               </div>
             </div>
           ) : (
@@ -514,142 +723,94 @@ const Dashboard = () => {
                         #
                       </th>
                       
-                      {schema.columns.filter(col => !col.is_primary_key).map((column) => {
-                        const getColumnDisplayName = (columnName) => {
-                          const translations = {
-                            'nombres': 'Nombre',
-                            'apellidos': 'Apellidos', 
-                            'correo': 'Correo',
-                            'usuario': 'Usuario',
-                            'id_rol': 'Rol',
-                            'rol': 'Rol',
-                            'esta_borrado': 'Estado',
-                            'descripcion': 'Descripción',
-                            'clave': 'Contraseña',
-                            'documentos': 'Documentos'
-                          };
-                          return translations[columnName] || columnName.charAt(0).toUpperCase() + columnName.slice(1);
-                        };
-
-                        return (
-                          <th
-                            key={column.column_name}
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            {getColumnDisplayName(column.column_name)}
-                          </th>
-                        );
-                      })}
+                      {schema.columns.filter(col => !col.is_primary_key).map((column) => (
+                        <th key={column.column_name} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center space-x-1">
+                            {schema.foreignKeys?.some(fk => fk.column_name === column.column_name) && (
+                              <span className="text-purple-500">🔗</span>
+                            )}
+                            <span>{getColumnDisplayName(column.column_name)}</span>
+                          </div>
+                        </th>
+                      ))}
                       
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Acciones
                       </th>
                     </tr>
                   </thead>
-
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {records.map((record, index) => {
-                      const primaryKey = schema.primaryKey;
-                      const recordId = record[primaryKey];
-
-                      return (
-                        <tr 
-                          key={index} 
-                          className="hover:bg-gray-50 transition-colors duration-150"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-yellow-600">🔑</span>
-                              <span>{recordId}</span>
-                            </div>
+                    {records.map((record, index) => (
+                      <tr key={record[schema.primaryKey]} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {index + 1 + ((pagination.currentPage - 1) * 50)}
+                        </td>
+                        
+                        {schema.columns.filter(col => !col.is_primary_key).map((column) => (
+                          <td key={column.column_name} className="px-6 py-4 whitespace-nowrap">
+                            {renderCellValue(record, column)}
                           </td>
-
-                          {schema.columns
-                            .filter(column => !column.is_primary_key)
-                            .map(column => (
-                              <td 
-                                key={column.column_name} 
-                                className="px-6 py-4 whitespace-nowrap text-sm"
-                              >
-                                {renderCellValue(record, column)}
-                              </td>
-                            ))}
-                          
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <div className="flex items-center space-x-2">
-                              <button 
-                                onClick={() => openEditModal(record)}
-                                className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                                title="Editar registro"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </button>
-                              <button 
-                                onClick={() => openDeleteModal(record)}
-                                className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all duration-200 transform hover:scale-110"
-                                title="Eliminar registro"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                        ))}
+                        
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => handleEditClick(record)}
+                              className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                              title="Editar registro"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(record)}
+                              className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                              title="Eliminar registro"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-
-          {/* Paginación */}
-          {pagination.totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> a{' '}
-                <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de{' '}
-                <span className="font-medium">{pagination.total}</span> resultados
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => loadPage(pagination.page - 1)}
-                  disabled={!pagination.hasPrev}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-                >
-                  Anterior
-                </button>
-                
-                <div className="flex items-center space-x-1">
-                  {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                    const pageNum = i + 1;
-                    return (
+              
+              {/* Paginación actualizada para mantener filtros */}
+              {pagination && pagination.totalPages > 1 && (
+                <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center text-sm text-gray-700">
+                      <span>
+                        Mostrando {((pagination.currentPage - 1) * 50) + 1} a {Math.min(pagination.currentPage * 50, pagination.total)} de {pagination.total} registros
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
                       <button
-                        key={pageNum}
-                        onClick={() => loadPage(pageNum)}
-                        className={`px-3 py-2 text-sm rounded-lg transition-colors duration-200 ${
-                          pagination.page === pageNum
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
+                        onClick={() => fetchRecords(selectedTable, pagination.currentPage - 1, true)}
+                        disabled={pagination.currentPage <= 1}
+                        className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {pageNum}
+                        Anterior
                       </button>
-                    );
-                  })}
+                      <span className="px-3 py-2 text-sm text-gray-700">
+                        Página {pagination.currentPage} de {pagination.totalPages}
+                      </span>
+                      <button
+                        onClick={() => fetchRecords(selectedTable, pagination.currentPage + 1, true)}
+                        disabled={pagination.currentPage >= pagination.totalPages}
+                        className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                  </div>
                 </div>
-
-                <button
-                  onClick={() => loadPage(pagination.page + 1)}
-                  disabled={!pagination.hasNext}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
-                >
-                  Siguiente
-                </button>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -657,23 +818,31 @@ const Dashboard = () => {
     );
   };
 
+  if (loading && !selectedTable) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Cargando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-rose-100">
-        <div className="text-center max-w-md">
-          <div className="w-24 h-24 bg-gradient-to-br from-red-100 to-rose-200 rounded-3xl flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">⚠️</span>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-200 rounded-lg flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">❌</span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Oops! Algo salió mal</h2>
-          <p className="text-gray-600 mb-6 leading-relaxed">{error}</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Error</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => {
-              setError(null);
-              loadTables();
-            }}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg transform hover:scale-105"
+            onClick={loadTables}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 font-medium"
           >
-            Reintentar conexión
+            Reintentar
           </button>
         </div>
       </div>
@@ -681,22 +850,20 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+    <div className="min-h-screen bg-gray-50">
       {/* Header principal */}
-      <header className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-gray-200/60">
-        <div className="px-8 py-6">
-          <div className="flex items-center justify-between">
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white text-xl">💾</span>
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-                  Dynamic DB Admin
-                </h1>
-                <p className="text-gray-600 mt-1">
-                  Administrador de base de datos • Estilo Prisma Studio
-                </p>
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">⚡</span>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+                  <p className="text-sm text-gray-600">Sistema de gestión de base de datos</p>
+                </div>
               </div>
             </div>
             <div className="flex items-center space-x-6">
@@ -707,7 +874,7 @@ const Dashboard = () => {
                 </div>
                 <div className="flex items-center space-x-2 bg-green-100 px-3 py-2 rounded-lg">
                   <span className="text-green-600">📊</span>
-                  <span className="text-gray-700 font-medium">{tables.length} tablas</span>
+                  <span className="text-gray-700 font-medium">{Array.isArray(tables) ? tables.length : 0} tablas</span>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -725,7 +892,7 @@ const Dashboard = () => {
         {renderDataTable()}
       </div>
 
-      {/* Modales existentes */}
+      {/* Modales */}
       {/* Modal Crear */}
       <Modal
         isOpen={showCreateModal}
@@ -837,6 +1004,16 @@ const Dashboard = () => {
           </div>
         )}
       </Modal>
+
+      {/* 🚀 NUEVO: Modal Filtros Inteligentes */}
+      <FormStyleFiltersModal
+        isOpen={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        onApplyFilters={handleApplyFilters}
+        schema={schema}
+        currentFilters={currentFilters}
+        tableName={selectedTable}
+      />
     </div>
   );
 };

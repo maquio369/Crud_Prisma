@@ -1,6 +1,7 @@
 // services/crudService.js
 const { executeQuery, executeTransaction } = require('../config/database');
 const SchemaService = require('./schemaService');
+const AdvancedFilterService = require('./advancedFilterService'); // 🚀 NUEVO: Servicio de filtros avanzados
 
 class CrudService {
   
@@ -19,8 +20,8 @@ class CrudService {
                       data[col.column_name] !== '';
       
       // Excluir primary key si es serial/autoincrement
-      const isAutoIncrement = col.is_primary_key && col.is_identity;console.log('🅰️ isAutoIncrement: ',isAutoIncrement)
-                             /* col.column_default && col.column_default.includes('nextval');*/
+      const isAutoIncrement = col.is_primary_key && col.is_identity;
+      console.log('🅰️ isAutoIncrement: ',isAutoIncrement);
       
       return hasValue && !isAutoIncrement;
     });
@@ -47,12 +48,7 @@ class CrudService {
     return result.rows[0];
   }
 
-  // READ - Obtener registros con paginación y filtros (CON AUTO-INCLUDE DE FOREIGN KEYS)
-  // ========== POST-PROCESAMIENTO PARA MOSTRAR NOMBRES EN LUGAR DE IDs ==========
-
-  // backend/services/crudService.js - Sección corregida
-
-  // ========== POST-PROCESAMIENTO PARA MOSTRAR NOMBRES EN LUGAR DE IDs ==========
+  // READ - Obtener registros con paginación y filtros (CON AUTO-INCLUDE DE FOREIGN KEYS Y FILTROS AVANZADOS)
   static async read(tableName, options = {}) {
     console.log(`📖 Leyendo registros de tabla: ${tableName}`);
     console.log('Opciones:', options);
@@ -64,7 +60,8 @@ class CrudService {
       include = [],
       orderBy = null,
       orderDirection = 'ASC',
-      autoIncludeForeignKeys = true // Por defecto incluir FK automáticamente
+      autoIncludeForeignKeys = true, // Por defecto incluir FK automáticamente
+      advancedFilter = null // 🚀 NUEVO: Filtros avanzados
     } = options;
 
     const schema = await SchemaService.getTableSchema(tableName);
@@ -100,7 +97,7 @@ class CrudService {
       paramCount++;
     }
 
-    // Filtros del usuario
+    // Filtros del usuario (filtros simples tradicionales)
     Object.entries(filters).forEach(([column, value]) => {
       if (value !== null && value !== undefined && value !== '') {
         const columnInfo = schema.columns.find(col => col.column_name === column);
@@ -117,6 +114,31 @@ class CrudService {
       }
     });
 
+    // 🚀 PROCESAR FILTROS AVANZADOS
+    // ===============================================
+    if (advancedFilter) {
+      console.log('🔧 Aplicando filtros avanzados...');
+      
+      const advancedResult = AdvancedFilterService.processAdvancedFilters(
+        { advancedFilter }, // Pasar el filtro avanzado en el formato esperado
+        tableName, 
+        whereConditions, 
+        params, 
+        paramCount
+      );
+      
+      whereConditions = advancedResult.whereConditions;
+      params = advancedResult.params;
+      paramCount = advancedResult.paramCount;
+      
+      console.log('✅ Filtros avanzados aplicados:', {
+        conditionsCount: whereConditions.length,
+        paramsCount: params.length,
+        finalParamCount: paramCount
+      });
+    }
+    // ===============================================
+
     // Construir SELECT y JOINs para incluir relaciones
     let selectColumns = `${tableName}.*`;
     let joinClauses = '';
@@ -132,8 +154,8 @@ class CrudService {
         );
         
         if (fkColumn) {
-          //sin _autoref para las referencias FK de otras entidades
-          const alias = `${tableName===relation?relation+"_autoref":relation}`;//_autoref necesario para la autoreferencia
+          // Sin _autoref para las referencias FK de otras entidades
+          const alias = `${tableName===relation?relation+"_autoref":relation}`; // _autoref necesario para la autoreferencia
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
             ON ${tableName}.${fkColumn.column_name} = ${alias}.${fkColumn.foreign_column_name}
@@ -144,11 +166,12 @@ class CrudService {
           
           // 🎯 ESTA ES LA PARTE CLAVE: Encontrar la columna de display correcta
           const displayColumn = this.findDisplayColumn(relatedSchema);
-          const fkColumnDesc=fkColumn.foreign_column_desc? fkColumn.foreign_column_desc : `${alias}.${displayColumn}`;
-          // Incluir tanto el ID como la columna de display
+          const fkColumnDesc = fkColumn.foreign_column_desc ? 
+            fkColumn.foreign_column_desc : 
+            `${alias}.${displayColumn}`;
+          
+          // Incluir la columna de display
           additionalSelects.push(
-            /*`${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,*/
-            /*`${fkColumnDesc} as ${alias}_${displayColumn}`*/
             `${fkColumnDesc} as ${fkColumn.column_name}_display`
           );
         }
@@ -208,33 +231,7 @@ class CrudService {
     const total = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(total / limit);
 
-    const processedData = dataResult.rows
-    /*
-    // 🚀 POST-PROCESAMIENTO: Crear campos _display para cada FK
-    const processedData = dataResult.rows.map(row => {
-      const processedRow = { ...row };
-      
-      // Para cada foreign key, crear un campo virtual con el nombre legible
-      if (autoIncludeForeignKeys && schema.foreignKeys) {
-        schema.foreignKeys.forEach(fk => {
-          //const alias = `${fk.foreign_table_name}`;//_data
-          
-          // Buscar la columna de display en los resultados
-          const displayValue = Object.keys(row).find(key => 
-            key.startsWith(`${fk.foreign_table_name}_`) && //key.startsWith(`${alias}_`) && 
-            !key.endsWith(`_${fk.foreign_column_name}`) // No el ID
-          );
-          
-          if (displayValue && row[displayValue]) {
-            // Crear campo virtual: id_rol_display = "Administrador"
-            processedRow[`${fk.column_name}_display`] = row[displayValue];
-          }
-        });
-      }
-      
-      return processedRow;
-    });
-*/
+    const processedData = dataResult.rows;
     
     console.log(`✅ Se obtuvieron ${dataResult.rows.length} registros de ${total} totales`);
 
@@ -264,17 +261,20 @@ class CrudService {
     return r.rows;    
   }
 
-  // ========== MÉTODOS HELPER CORREGIDOS ==========
+  // ========== MÉTODOS HELPER ==========
   static findDisplayColumn(schema) {
     // Prioridades para encontrar la mejor columna de display
     const priorities = [
       // Primera prioridad: columnas con "nombre" o "name"
-    
-
-      // Cuarta prioridad: columnas específicas comunes
+      col => col.column_name.toLowerCase().includes('nombre') || col.column_name.toLowerCase().includes('name'),
+      
+      // Segunda prioridad: columnas comunes descriptivas
+      col => ['titulo', 'title', 'descripcion', 'description', 'label'].includes(col.column_name.toLowerCase()),
+      
+      // Tercera prioridad: columnas específicas comunes
       col => ['apellido1'].includes(col.column_name.toLowerCase()),
       
-      // Quinta prioridad: cualquier columna de texto que no sea primary key
+      // Cuarta prioridad: cualquier columna de texto que no sea primary key
       col => col.data_type === 'text' && !col.is_primary_key,
       
       // Última opción: columnas varchar que no sean primary key
@@ -299,9 +299,6 @@ class CrudService {
     const schema = await SchemaService.getTableSchema(tableName);
     return this.findDisplayColumn(schema);
   }
-
- 
-  // ==========================================
 
   // READ ONE - Obtener un registro específico
   static async readOne(tableName, id, include = []) {
@@ -422,29 +419,31 @@ class CrudService {
   // Obtener opciones para campos de foreign key
   static async getForeignKeyOptions(tableName, columnName) {
     console.log(`🔗🔗 Obteniendo opciones para FK: ${tableName}.${columnName}`);
-    // usuarios . id_empleado
+    
     const schema = await SchemaService.getTableSchema(tableName);
     const fkColumn = schema.foreignKeys.find(fk => fk.column_name === columnName);
     
     if (!fkColumn) {
       throw new Error(`La columna ${columnName} no es una foreign key`);
     }
+    
     console.log(`🏴‍☠️🏴‍☠️🏴‍☠️ Obteniendo opciones para FK: ${fkColumn.foreign_column_desc}-${fkColumn.column_desc}`);
     console.log(`🏴‍☠️🏴‍☠️🏴‍☠️ Obteniendo opciones para FK: ${fkColumn.foreign_table_name}-${fkColumn.foreign_column_desc}-${fkColumn.foreign_column_name}`);
-    // empleados -undefined- id_empleado
+    
     const foreignSchema = await SchemaService.getTableSchema(fkColumn.foreign_table_name);
     
     // Usar el nuevo método helper
-    const displayColumn = fkColumn.foreign_column_desc? fkColumn.foreign_column_desc : this.findDisplayColumn(foreignSchema);
-    //const displayColumn = this.findDisplayColumn(foreignSchema);
-    const options = await this.getOptionsList(fkColumn.foreign_column_name, displayColumn, fkColumn.foreign_table_name);
-    /*const options = await this.read(fkColumn.foreign_table_name, {
-      limit: 1000, // Límite alto para opciones
-      orderBy: displayColumn,
-      autoIncludeForeignKeys: false // No incluir FKs en las opciones
-    });*/
+    const displayColumn = fkColumn.foreign_column_desc ? 
+      fkColumn.foreign_column_desc : 
+      this.findDisplayColumn(foreignSchema);
+    
+    const options = await this.getOptionsList(
+      fkColumn.foreign_column_name, 
+      displayColumn, 
+      fkColumn.foreign_table_name
+    );
 
-    console.log(`💬✅ opciones para ${fkColumn.foreign_table_name}[${options.length}]`,options);
+    console.log(`💬✅ opciones para ${fkColumn.foreign_table_name}[${options.length}]`, options);
 
     return {
       options: options.map(item => ({        
