@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import Modal from './Modal';
 import RecordForm from './RecordForm';
 import FormStyleFiltersModal from './FormStyleFiltersModal';
+import * as XLSX from 'xlsx';
 
 const Dashboard = () => {
   const [tables, setTables] = useState([]); // Inicializar como array vacío
@@ -26,6 +27,7 @@ const Dashboard = () => {
   const [currentFilters, setCurrentFilters] = useState({});
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
   const [smartFilters, setSmartFilters] = useState({}); // 🚀 NUEVO: Para almacenar filtros inteligentes
+  const [exportLoading, setExportLoading] = useState(false); // Estado para exportación
 
   // Cargar tablas al montar el componente
   useEffect(() => {
@@ -367,6 +369,8 @@ const handleApplyFilters = async (filterData) => {
     }
   };
 
+  
+
   const handleEditRecord = async (formData) => {
     try {
       setCrudLoading(true);
@@ -529,35 +533,186 @@ const handleApplyFilters = async (filterData) => {
     return <span className="text-sm text-gray-700">{value}</span>;
   };
 
-  const getColumnDisplayName = (columnName) => {
-    const translations = {
-      'nombres': 'Nombre',
-      'apellidos': 'Apellidos', 
-      'correo': 'Correo',
-      'usuario': 'Usuario',
-      'id_rol': 'Rol',
-      'rol': 'Rol',
-      'esta_borrado': 'Estado',
-      'descripcion': 'Descripción',
-      'activo': 'Activo',
-      'estado': 'Estado',
-      'telefono': 'Teléfono',
-      'direccion': 'Dirección',
-      'fecha_nacimiento': 'Fecha de Nacimiento',
-      'salario': 'Salario',
-      'departamento': 'Departamento',
-      'cargo': 'Cargo',
-      'codigo': 'Código',
-      'nombre': 'Nombre',
-      'precio': 'Precio',
-      'cantidad': 'Cantidad',
-      'categoria': 'Categoría'
-    };
-    
-    return translations[columnName] || 
-           columnName.charAt(0).toUpperCase() + 
-           columnName.slice(1).replace(/_/g, ' ');
+ const getColumnDisplayName = (columnName) => {
+  const translations = {
+    'id': 'ID',
+    'nombres': 'Nombre',
+    'apellidos': 'Apellidos', 
+    'correo': 'Correo Electrónico',
+    'email': 'Correo Electrónico',
+    'usuario': 'Usuario',
+    'id_rol': 'Rol',
+    'rol': 'Rol',
+    'esta_borrado': 'Estado',
+    'descripcion': 'Descripción',
+    'activo': 'Activo',
+    'estado': 'Estado',
+    'telefono': 'Teléfono',
+    'direccion': 'Dirección',
+    'fecha_nacimiento': 'Fecha de Nacimiento',
+    'fecha_creacion': 'Fecha de Creación',
+    'fecha_actualizacion': 'Última Actualización',
+    'salario': 'Salario',
+    'departamento': 'Departamento',
+    'cargo': 'Cargo',
+    'codigo': 'Código',
+    'nombre': 'Nombre',
+    'precio': 'Precio',
+    'cantidad': 'Cantidad',
+    'categoria': 'Categoría'
   };
+  
+  return translations[columnName] || 
+         columnName.charAt(0).toUpperCase() + 
+         columnName.slice(1).replace(/_/g, ' ');
+};
+
+
+
+// Función para exportar a Excel
+const handleExportToExcel = async () => {
+  if (!selectedTable || !records.length) {
+    alert('No hay datos para exportar');
+    return;
+  }
+
+  try {
+    setExportLoading(true);
+    console.log('📊 Iniciando exportación a Excel...');
+
+    // Obtener todos los registros (sin paginación) con filtros aplicados
+    const exportParams = {
+      limit: '10000', // Exportar todos los registros
+      page: '1',
+      ...currentFilters // Mantener filtros aplicados
+    };
+
+    const response = await apiService.getRecords(selectedTable, exportParams);
+    
+    let allRecords;
+    if (response.data && response.data.data) {
+      allRecords = response.data.data;
+    } else if (response.data) {
+      allRecords = response.data;
+    } else {
+      allRecords = response;
+    }
+
+    if (!Array.isArray(allRecords) || allRecords.length === 0) {
+      alert('No hay registros para exportar');
+      return;
+    }
+
+    // Preparar datos para Excel
+    const excelData = prepareDataForExcel(allRecords);
+
+    // Crear workbook
+    const workbook = XLSX.utils.book_new();
+    
+    // Crear worksheet
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Configurar anchos de columna automáticamente
+    const columnWidths = [];
+    if (excelData.length > 0) {
+      Object.keys(excelData[0]).forEach(key => {
+        const maxLength = Math.max(
+          key.length, // Longitud del header
+          ...excelData.map(row => 
+            row[key] ? row[key].toString().length : 0
+          )
+        );
+        columnWidths.push({ wch: Math.min(maxLength + 2, 50) });
+      });
+    }
+    worksheet['!cols'] = columnWidths;
+
+    // Agregar worksheet al workbook
+    const sheetName = selectedTable.charAt(0).toUpperCase() + selectedTable.slice(1);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    // Generar nombre de archivo
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const fileName = `${selectedTable}_export_${timestamp}.xlsx`;
+
+    // Descargar archivo
+    XLSX.writeFile(workbook, fileName);
+
+    console.log(`✅ Exportación completada: ${fileName}`);
+    
+    // Mostrar mensaje de éxito
+    const exportedCount = allRecords.length;
+    alert(`✅ Exportación exitosa!\n\n📊 ${exportedCount} registros exportados\n📁 Archivo: ${fileName}`);
+
+  } catch (error) {
+    console.error('❌ Error durante la exportación:', error);
+    alert('Error al exportar: ' + (error.response?.data?.message || error.message));
+  } finally {
+    setExportLoading(false);
+  }
+};
+
+// Función auxiliar para preparar datos para Excel
+const prepareDataForExcel = (records) => {
+  if (!records.length || !schema) return [];
+
+  return records.map(record => {
+    const excelRow = {};
+
+    // Procesar cada columna según su tipo
+    schema.columns.forEach(column => {
+      const columnName = column.column_name;
+      let value = record[columnName];
+      let displayName = getColumnDisplayName(columnName);
+
+      // Manejar claves foráneas - mostrar el texto descriptivo
+      if (schema.foreignKeys) {
+        const fkColumn = schema.foreignKeys.find(fk => fk.column_name === columnName);
+        if (fkColumn) {
+          const displayField = `${columnName}_display`;
+          const displayValue = record[displayField];
+          
+          if (displayValue) {
+            excelRow[displayName] = `${displayValue} (#${value})`;
+            return;
+          }
+        }
+      }
+
+      // Procesar según tipo de dato
+      if (value === null || value === undefined) {
+        excelRow[displayName] = '';
+      } else if (typeof value === 'boolean') {
+        excelRow[displayName] = value ? 'Sí' : 'No';
+      } else if (column.data_type === 'timestamp' || column.data_type === 'date') {
+        try {
+          const date = new Date(value);
+          excelRow[displayName] = date.toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            ...(column.data_type === 'timestamp' && {
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          });
+        } catch {
+          excelRow[displayName] = value;
+        }
+      } else if (typeof value === 'number') {
+        // Formatear números con separadores de miles
+        excelRow[displayName] = value.toLocaleString('es-ES');
+      } else {
+        excelRow[displayName] = value.toString();
+      }
+    });
+
+    return excelRow;
+  });
+};
+
+
+
 
   const renderTablesList = () => (
     <div className="w-80 bg-gradient-to-br from-slate-50 to-gray-100 border-r border-gray-200/60 backdrop-blur-sm">
@@ -715,12 +870,19 @@ const handleApplyFilters = async (filterData) => {
                 )}
               </button>
               
-              <button className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>Exportar</span>
-              </button>
+              <button 
+  onClick={handleExportToExcel}
+  disabled={exportLoading || !selectedTable || !records.length}
+  className="flex items-center space-x-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {exportLoading && (
+    <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-600 border-t-transparent"></div>
+  )}
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+  <span>{exportLoading ? 'Exportando...' : 'Exportar'}</span>
+</button>
 
               <button className="p-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors duration-200">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
