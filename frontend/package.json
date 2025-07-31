@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
+  "overrides": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.1/xlsx-0.20.1.tgz"
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
     "axios": "^1.10.0",
@@ -17,7 +20,6 @@
     "react-hook-form": "^7.58.1",
     "react-router-dom": "^7.6.2",
     "react-select": "^5.10.1",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.67"
   },
   "devDependencies": {
