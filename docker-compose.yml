@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   # Backend API
   backend:
@@ -14,9 +13,12 @@ services:
       - PORT=3001
       # Aquí agregarás tus variables de entorno del .env
       - DATABASE_URL=${DATABASE_URL}
+      # URL para conectar con JasperReports
+      - JASPER_SERVER_URL=http://jasperreports-server:8080
     restart: unless-stopped
     networks:
       - dynamic-db-network
+      - shared-network  # Red compartida agregada
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -42,10 +44,13 @@ services:
     restart: unless-stopped
     networks:
       - dynamic-db-network
+      - shared-network  # Red compartida agregada
 
 networks:
   dynamic-db-network:
     driver: bridge
+  shared-network:
+    external: true  # Red externa compartida
 
 # Volúmenes opcionales para persistencia
 volumes:
