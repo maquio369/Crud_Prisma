@@ -173,6 +173,8 @@ class CrudService {
           // Incluir la columna de display
           additionalSelects.push(
             `${fkColumnDesc} as ${fkColumn.column_name}_display`
+            /*`${alias}.${relatedSchema.primaryKey} as ${alias}_${relatedSchema.primaryKey}`,
+            `${fkColumnDesc} as ${alias}_${displayColumn}`*/
           );
         }
       }
@@ -231,8 +233,33 @@ class CrudService {
     const total = parseInt(countResult.rows[0].total);
     const totalPages = Math.ceil(total / limit);
 
-    const processedData = dataResult.rows;
-    
+    //const processedData = dataResult.rows;
+    // 🚀 POST-PROCESAMIENTO: Crear campos _display para cada FK
+    const processedData = dataResult.rows.map((row) => {
+      const processedRow = { ...row };
+
+      // Para cada foreign key, crear un campo virtual con el nombre legible
+      if (autoIncludeForeignKeys && schema.foreignKeys) {
+        schema.foreignKeys.forEach((fk) => {
+          const alias = `${fk.foreign_table_name}`; //_data
+
+          // Buscar la columna de display en los resultados
+          const displayValue = Object.keys(row).find(
+            (key) =>
+              key.startsWith(`${alias}_`) &&
+              !key.endsWith(`_${fk.foreign_column_name}`) // No el ID
+          );
+
+          if (displayValue && row[displayValue]) {
+            // Crear campo virtual: id_rol_display = "Administrador"
+            processedRow[`${fk.column_name}_display`] = row[displayValue];
+          }
+        });
+      }
+
+      return processedRow;
+    });
+
     console.log(`✅ Se obtuvieron ${dataResult.rows.length} registros de ${total} totales`);
 
     return {
@@ -265,20 +292,17 @@ class CrudService {
   static findDisplayColumn(schema) {
     // Prioridades para encontrar la mejor columna de display
     const priorities = [
-      // Primera prioridad: columnas con "nombre" o "name"
-      col => col.column_name.toLowerCase().includes('nombre') || col.column_name.toLowerCase().includes('name'),
-      
-      // Segunda prioridad: columnas comunes descriptivas
-      col => ['titulo', 'title', 'descripcion', 'description', 'label'].includes(col.column_name.toLowerCase()),
-      
-      // Tercera prioridad: columnas específicas comunes
-      col => ['apellido1'].includes(col.column_name.toLowerCase()),
-      
-      // Cuarta prioridad: cualquier columna de texto que no sea primary key
-      col => col.data_type === 'text' && !col.is_primary_key,
-      
+      // Primera prioridad: 
+      //(col) => ["apellido1"].includes(col.column_name.toLowerCase()),
+
+      // prioridad secundaria: primer columna de texto que no sea primary key
+      (col) => col.data_type === "text" && !col.is_primary_key,
+
       // Última opción: columnas varchar que no sean primary key
-      col => (col.data_type === 'character varying' || col.data_type === 'varchar') && !col.is_primary_key
+      (col) =>
+        (col.data_type === "character varying" ||
+          col.data_type === "varchar") &&
+        !col.is_primary_key,
     ];
 
     // Buscar por prioridades
