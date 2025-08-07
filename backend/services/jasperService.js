@@ -18,7 +18,7 @@ class JasperService {
   async authenticate() {
     try {
       const response = await axios.post(
-        `${this.jasperApiUrl}/login`,
+        `${this.jasperServerUrl}/rest_v2/login`,
         null,
         {
           auth: this.credentials,
@@ -148,3 +148,4 @@ class JasperService {
 
 
 module.exports = new JasperService();
+
