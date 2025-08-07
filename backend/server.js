@@ -5,6 +5,7 @@ require('dotenv').config();
 
 const { testConnection } = require('./config/database');
 const dynamicRoutes = require('./routes/dynamicRoutes');
+const jasperRoutes = require('./routes/jasperRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', dynamicRoutes);
+app.use('/api/reports', jasperRoutes);
 
 // Middleware de logging
 app.use((req, res, next) => {
