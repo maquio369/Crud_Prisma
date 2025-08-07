@@ -2,23 +2,26 @@
 // Servicio para procesar filtros avanzados con operadores relacionales y lógicos
 
 class AdvancedFilterService {
-  
   // Construir WHERE clause a partir de filtros avanzados
   static buildAdvancedWhereClause(filterQuery, tableName, paramCount = 1) {
-    if (!filterQuery || !filterQuery.groups || filterQuery.groups.length === 0) {
-      return { whereClause: '', params: [], paramCount };
+    if (
+      !filterQuery ||
+      !filterQuery.groups ||
+      filterQuery.groups.length === 0
+    ) {
+      return { whereClause: "", params: [], paramCount };
     }
 
     const { whereClause, params, newParamCount } = this.processGroups(
-      filterQuery.groups, 
-      tableName, 
+      filterQuery.groups,
+      tableName,
       paramCount
     );
 
     return {
-      whereClause: whereClause ? `WHERE ${whereClause}` : '',
+      whereClause: whereClause ? `WHERE ${whereClause}` : "",
       params,
-      paramCount: newParamCount
+      paramCount: newParamCount,
     };
   }
 
@@ -30,25 +33,26 @@ class AdvancedFilterService {
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
-      
+
       if (group.conditions && group.conditions.length > 0) {
         const { clause, groupParams, newParamCount } = this.processConditions(
-          group.conditions, 
-          tableName, 
+          group.conditions,
+          tableName,
           currentParamCount
         );
-        
+
         if (clause) {
           // Si hay múltiples condiciones en el grupo, envolverlas en paréntesis
-          const groupClause = group.conditions.length > 1 ? `(${clause})` : clause;
-          
+          const groupClause =
+            group.conditions.length > 1 ? `(${clause})` : clause;
+
           // Agregar operador de grupo si no es el primer grupo
           if (i > 0 && group.groupOperator) {
             groupClauses.push(`${group.groupOperator} ${groupClause}`);
           } else {
             groupClauses.push(groupClause);
           }
-          
+
           params.push(...groupParams);
           currentParamCount = newParamCount;
         }
@@ -56,9 +60,9 @@ class AdvancedFilterService {
     }
 
     return {
-      whereClause: groupClauses.join(' '),
+      whereClause: groupClauses.join(" "),
       params,
-      paramCount: currentParamCount
+      paramCount: currentParamCount,
     };
   }
 
@@ -70,14 +74,11 @@ class AdvancedFilterService {
 
     for (let i = 0; i < conditions.length; i++) {
       const condition = conditions[i];
-      
+
       if (condition.field && condition.operator) {
-        const { clause, conditionParams, newParamCount } = this.buildConditionClause(
-          condition, 
-          tableName, 
-          currentParamCount
-        );
-        
+        const { clause, conditionParams, newParamCount } =
+          this.buildConditionClause(condition, tableName, currentParamCount);
+
         if (clause) {
           // Agregar operador lógico si no es la primera condición
           if (i > 0 && condition.logicalOperator) {
@@ -85,7 +86,7 @@ class AdvancedFilterService {
           } else {
             conditionClauses.push(clause);
           }
-          
+
           params.push(...conditionParams);
           currentParamCount = newParamCount;
         }
@@ -93,94 +94,108 @@ class AdvancedFilterService {
     }
 
     return {
-      clause: conditionClauses.join(' '),
+      clause: conditionClauses.join(" "),
       groupParams: params,
-      newParamCount: currentParamCount
+      newParamCount: currentParamCount,
     };
   }
 
   // Construir cláusula individual según el operador
   static buildConditionClause(condition, tableName, paramCount) {
     const { field, operator, value } = condition;
+    /*
+    const field = condition[0];
+    const operator = condition[1];
+    const value = condition[2];
+    */
     const columnRef = `${tableName}.${field}`;
-    let clause = '';
+    let clause = "";
     let params = [];
     let currentParamCount = paramCount;
-
+    console.log(condition, "+ operator>>>>", field, operator, value);
     switch (operator) {
-      case '=':
+      case "equal":
+      case "=":
         clause = `${columnRef} = $${currentParamCount}`;
         params.push(value);
         currentParamCount++;
         break;
 
-      case '!=':
+      case "not_equal":
+      case "!=":
         clause = `${columnRef} != $${currentParamCount}`;
         params.push(value);
         currentParamCount++;
         break;
 
-      case '>':
+      case "gt":
+      case ">":
         clause = `${columnRef} > $${currentParamCount}`;
         params.push(value);
         currentParamCount++;
         break;
 
-      case '<':
+      case "lt":
+      case "<":
         clause = `${columnRef} < $${currentParamCount}`;
         params.push(value);
+        console.log(columnRef, " < ", value, " $", currentParamCount);
         currentParamCount++;
         break;
 
-      case '>=':
+      case "gte":
+      case ">=":
         clause = `${columnRef} >= $${currentParamCount}`;
         params.push(value);
         currentParamCount++;
         break;
 
-      case '<=':
+      case "lte":
+      case "<=":
         clause = `${columnRef} <= $${currentParamCount}`;
         params.push(value);
         currentParamCount++;
         break;
 
-      case 'LIKE':
+      case "LIKE":
         clause = `${columnRef} ILIKE $${currentParamCount}`;
         params.push(`%${value}%`);
         currentParamCount++;
         break;
 
-      case 'NOT_LIKE':
+      case "NOT_LIKE":
         clause = `${columnRef} NOT ILIKE $${currentParamCount}`;
         params.push(`%${value}%`);
         currentParamCount++;
         break;
 
-      case 'STARTS_WITH':
+      case "STARTS_WITH":
         clause = `${columnRef} ILIKE $${currentParamCount}`;
         params.push(`${value}%`);
         currentParamCount++;
         break;
 
-      case 'ENDS_WITH':
+      case "ENDS_WITH":
         clause = `${columnRef} ILIKE $${currentParamCount}`;
         params.push(`%${value}`);
         currentParamCount++;
         break;
 
-      case 'IS_NULL':
+      case "IS_NULL":
         clause = `${columnRef} IS NULL`;
         break;
 
-      case 'IS_NOT_NULL':
+      case "IS_NOT_NULL":
         clause = `${columnRef} IS NOT NULL`;
         break;
 
-      case 'BETWEEN':
-        if (value && value.includes(',')) {
-          const [min, max] = value.split(',');
+      case "BETWEEN":
+        if (value && value.includes(",")) {
+          const [min, max] = value.split(",");
           if (min && max) {
-            clause = `${columnRef} BETWEEN $${currentParamCount} AND $${currentParamCount + 1}`;
+            clause = `${columnRef} BETWEEN $${currentParamCount} AND $${
+              currentParamCount + 1
+            }`;
             params.push(min.trim(), max.trim());
             currentParamCount += 2;
           }
@@ -191,44 +206,56 @@ class AdvancedFilterService {
         console.warn(`Operador no soportado: ${operator}`);
         break;
     }
-
+    console.log("🔧 Cláusula:", clause, "   🅿 Parámetros:", params);
     return {
       clause,
       conditionParams: params,
-      newParamCount: currentParamCount
+      newParamCount: currentParamCount,
     };
   }
 
   // Procesar filtros en el CrudService
-  static processAdvancedFilters(options, tableName, whereConditions, params, paramCount) {
+  static processAdvancedFilters(
+    options,
+    tableName,
+    whereConditions,
+    params,
+    paramCount
+  ) {
     // Verificar si hay filtros avanzados
     if (options.advancedFilter) {
       try {
-        const filterQuery = typeof options.advancedFilter === 'string' 
-          ? JSON.parse(options.advancedFilter) 
-          : options.advancedFilter;
+        const filterQuery =
+          typeof options.advancedFilter === "string"
+            ? JSON.parse(options.advancedFilter)
+            : options.advancedFilter;
 
-        console.log('🔧 Procesando filtros avanzados:', JSON.stringify(filterQuery, null, 2));
+        console.log(
+          "🔧 Procesando filtros avanzados:",
+          JSON.stringify(filterQuery, null, 2)
+        );
 
-        const { whereClause, params: advancedParams, paramCount: newParamCount } = 
-          this.buildAdvancedWhereClause(filterQuery, tableName, paramCount);
+        const {
+          whereClause,
+          params: advancedParams,
+          paramCount: newParamCount,
+        } = this.buildAdvancedWhereClause(filterQuery, tableName, paramCount);
 
         if (whereClause) {
           // Remover el "WHERE" del inicio ya que se agregará después
-          const clauseWithoutWhere = whereClause.replace(/^WHERE\s+/, '');
+          const clauseWithoutWhere = whereClause.replace(/^WHERE\s+/, "");
           whereConditions.push(clauseWithoutWhere);
           params.push(...advancedParams);
           paramCount = newParamCount;
         }
 
-        console.log('✅ Filtros avanzados procesados:', {
+        console.log("✅ Filtros avanzados procesados:", {
           whereClause: clauseWithoutWhere,
           paramCount: newParamCount,
-          paramsAdded: advancedParams.length
+          paramsAdded: advancedParams.length,
         });
-
       } catch (error) {
-        console.error('❌ Error procesando filtros avanzados:', error);
+        console.error("❌ Error procesando filtros avanzados:", error);
       }
     }
 

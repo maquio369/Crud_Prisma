@@ -259,19 +259,19 @@ router.get('/tables/:tableName', async (req, res) => {
     
     const options = {
       page: parseInt(page),
-      limit: Math.min(parseInt(limit), 1000), // Límite máximo de seguridad
+      limit: Math.min(parseInt(limit), 1976), // Límite máximo de seguridad
       orderBy,
       orderDirection: orderDirection.toUpperCase(),
       include: include ? include.split(',') : [],
-      filters: Object.keys(filters).reduce((acc, key) => {
+      filters: Object.keys(filters).reduce((accumulator, key) => {
         // Filtrar parámetros vacíos
         if (filters[key] !== '' && filters[key] !== null && filters[key] !== undefined) {
-          acc[key] = filters[key];
+          accumulator[key] = filters[key];
         }
-        return acc;
+        return accumulator;
       }, {})
     };
-    
+    console.log("options-------------------->>", options);
     const result = await CrudService.read(tableName, options);
     
     res.json({
