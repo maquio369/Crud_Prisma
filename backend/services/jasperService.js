@@ -127,7 +127,7 @@ class JasperService {
   // Verificar estado del servidor JasperReports
   async healthCheck() {
     try {
-      const response = await axios.get(`${this.jasperServerUrl}/jasperserver`, {
+      const response = await axios.get(`${this.jasperServerUrl}/rest_v2`, {
         timeout: 5000
       });
       
@@ -148,4 +148,5 @@ class JasperService {
 
 
 module.exports = new JasperService();
+
 
