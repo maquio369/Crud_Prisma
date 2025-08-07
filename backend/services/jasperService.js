@@ -15,34 +15,33 @@ class JasperService {
   }
 
   // Autenticación con JasperReports Server
-// Reemplazar todo el método authenticate():
-async authenticate() {
-  try {
-    // Primer paso: Obtener formulario de login
-    const loginFormResponse = await axios.get(`${this.jasperServerUrl}/login.html`);
-    
-    // Segundo paso: Hacer login con credenciales
-    const response = await axios.post(
-      `${this.jasperServerUrl}/j_spring_security_check`,
-      new URLSearchParams({
-        'j_username': 'jasperadmin',
-        'j_password': 'jasperadmin'
-      }),
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        maxRedirects: 0,
-        validateStatus: (status) => status < 400 || status === 302
-      }
-    );
-    
-    return response.headers['set-cookie'];
-  } catch (error) {
-    console.error('❌ Error de autenticación:', error.message);
-    throw new Error('No se pudo conectar con JasperReports Server');
+  async authenticate() {
+    try {
+      // Primer paso: Obtener formulario de login
+      const loginFormResponse = await axios.get(`${this.jasperServerUrl}/login.html`);
+      
+      // Segundo paso: Hacer login con credenciales
+      const response = await axios.post(
+        `${this.jasperServerUrl}/j_spring_security_check`,
+        new URLSearchParams({
+          'j_username': 'jasperadmin',
+          'j_password': 'jasperadmin'
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          maxRedirects: 0,
+          validateStatus: (status) => status < 400 || status === 302
+        }
+      );
+      
+      return response.headers['set-cookie'];
+    } catch (error) {
+      console.error('❌ Error de autenticación:', error.message);
+      throw new Error('No se pudo conectar con JasperReports Server');
+    }
   }
-}
 
   // Generar reporte en formato PDF
   async generateReport(reportPath, format = 'pdf', parameters = {}) {
@@ -135,28 +134,25 @@ async authenticate() {
   }
 
   // Verificar estado del servidor JasperReports
- // Reemplazar todo el método healthCheck():
-async healthCheck() {
-  try {
-    const response = await axios.get(`${this.jasperServerUrl}/login.html`, {
-      timeout: 5000
-    });
-    
-    return {
-      status: 'healthy',
-      url: this.jasperServerUrl,
-      response: response.status
-    };
-  } catch (error) {
-    return {
-      status: 'unhealthy',
-      url: this.jasperServerUrl,
-      error: error.message
-    };
+  async healthCheck() {
+    try {
+      const response = await axios.get(`${this.jasperServerUrl}/login.html`, {
+        timeout: 5000
+      });
+      
+      return {
+        status: 'healthy',
+        url: this.jasperServerUrl,
+        response: response.status
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        url: this.jasperServerUrl,
+        error: error.message
+      };
+    }
   }
-}
+} 
 
 module.exports = new JasperService();
-
-
-
