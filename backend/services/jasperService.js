@@ -5,7 +5,7 @@ class JasperService {
   constructor() {
     // URL del servidor JasperReports (desde variable de entorno)
     this.jasperServerUrl = process.env.JASPER_SERVER_URL || 'http://jasperreports-server:8080';
-    this.jasperApiUrl = `${this.jasperServerUrl}/jasperserver/rest_v2`;
+    this.jasperApiUrl = `${this.jasperServerUrl}/rest_v2`;
     
     // Credenciales
     this.credentials = {
@@ -145,5 +145,6 @@ class JasperService {
     }
   }
 }
+
 
 module.exports = new JasperService();
