@@ -93,7 +93,7 @@ class JasperService {
 
   // Método específico para el reporte de años
   async generateAniosReport(filters = {}) {
-    const reportPath = '/CRUD_Reports/Reporte_Anos'; // Ajusta la ruta según donde subiste tu reporte
+    const reportPath = '/Años/Anos';
     
     // Parámetros opcionales para filtrar el reporte
     const parameters = {
@@ -156,3 +156,4 @@ class JasperService {
 } 
 
 module.exports = new JasperService();
+
