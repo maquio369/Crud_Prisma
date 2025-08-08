@@ -4,45 +4,46 @@ const jasperService = require('../services/jasperService');
 class JasperController {
   // Generar reporte de años
   static async generateAniosReport(req, res) {
-    try {
-      console.log('📊 Solicitud de reporte de años recibida');
-      console.log('Query params:', req.query);
-      
-      const filters = {
-        estado: req.query.estado,
-        anioDesde: req.query.anioDesde,
-        anioHasta: req.query.anioHasta
-      };
-      
-      // Generar reporte usando JasperService
-      const result = await jasperService.generateAniosReport(filters);
-      
-      if (result.success) {
-        // Configurar headers para descarga de PDF
-        res.set({
-          'Content-Type': result.contentType,
-          'Content-Disposition': `attachment; filename="${result.filename}"`,
-          'Content-Length': result.data.length
-        });
-        
-        // Enviar el PDF
-        res.send(Buffer.from(result.data));
-        
-        console.log('✅ Reporte enviado exitosamente');
-      } else {
-        throw new Error('Error en la generación del reporte');
-      }
-      
-    } catch (error) {
-      console.error('❌ Error en generateAniosReport:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Error al generar reporte',
-        message: error.message,
-        timestamp: new Date().toISOString()
+  try {
+    console.log('📊 Solicitud de reporte de años recibida');
+    console.log('Query params:', req.query);
+    
+    // 🚀 CORRECCIÓN: Usar TODOS los query params como filtros
+    const filters = { ...req.query }; // Tomar todos los parámetros
+    
+    console.log('🔍 Filtros procesados para el reporte:', filters);
+    
+    // Generar reporte usando JasperService
+    const result = await jasperService.generateAniosReport(filters);
+    
+    if (result.success) {
+      // Configurar headers para descarga de PDF
+      res.set({
+        'Content-Type': result.contentType,
+        'Content-Disposition': `attachment; filename="${result.filename}"`,
+        'Content-Length': result.data.length
       });
+      
+      // Enviar el PDF
+      res.send(Buffer.from(result.data));
+      
+      console.log('✅ Reporte enviado exitosamente');
+    } else {
+      throw new Error('Error en la generación del reporte');
     }
+    
+  } catch (error) {
+    console.error('❌ Error en generateAniosReport:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al generar reporte',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
+}
+  
+  
   
   // Generar reporte genérico para cualquier tabla
   static async generateTableReport(req, res) {
@@ -150,5 +151,6 @@ class JasperController {
     }
   }
 }
+
 
 module.exports = JasperController;
