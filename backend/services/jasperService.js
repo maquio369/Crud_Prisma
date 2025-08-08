@@ -92,24 +92,56 @@ class JasperService {
   }
 
   // Método específico para el reporte de años
-  async generateAniosReport(filters = {}) {
-    const reportPath = '/Años/Anos';
-    
-    // Parámetros opcionales para filtrar el reporte
-    const parameters = {
-      // Si quieres filtrar por estado específico
-      ...(filters.estado && { ESTADO_FILTER: filters.estado }),
-      
-      // Si quieres filtrar por rango de años
-      ...(filters.anioDesde && { ANIO_DESDE: filters.anioDesde }),
-      ...(filters.anioHasta && { ANIO_HASTA: filters.anioHasta }),
-      
-      // Parámetro de fecha de generación
-      FECHA_GENERACION: new Date().toISOString().split('T')[0]
-    };
-    
-    return this.generateReport(reportPath, 'pdf', parameters);
+// Modificación del método generateAniosReport en jasperService.js
+// Solo cambiar este método específico:
+
+// Método específico para el reporte de años
+async generateAniosReport(filters = {}) {
+  console.log('📊 Filtros recibidos para reporte de años:', filters);
+  
+  const reportPath = '/Años/Anos';
+  
+  // 🚀 NUEVO: Procesar filtros del Dashboard
+  const parameters = {};
+  
+  // Procesar filtro de descripción (LIKE)
+  if (filters.descripcion) {
+    parameters['P_DESCRIPCION'] = filters.descripcion;
+    console.log('🔍 Filtro descripción aplicado:', filters.descripcion);
   }
+  
+  // Procesar filtro de estado (booleano)
+  if (filters.esta_borrado !== undefined) {
+    parameters['P_ESTADO'] = filters.esta_borrado;
+    console.log('🔍 Filtro estado aplicado:', filters.esta_borrado);
+  }
+  
+  // Procesar filtro de clave año
+  if (filters.clave_año_del_gasto) {
+    parameters['P_CLAVE_ANO'] = filters.clave_año_del_gasto;
+    console.log('🔍 Filtro clave año aplicado:', filters.clave_año_del_gasto);
+  }
+  
+  // Procesar filtro de ID (si viene)
+  if (filters.id_año_del_gasto) {
+    parameters['P_ID_ANO'] = filters.id_año_del_gasto;
+    console.log('🔍 Filtro ID aplicado:', filters.id_año_del_gasto);
+  }
+  
+  // Agregar parámetros adicionales
+  parameters['FECHA_GENERACION'] = new Date().toISOString().split('T')[0];
+  
+  // Si hay filtros aplicados, agregar indicador
+  const hasFilters = Object.keys(filters).length > 0;
+  if (hasFilters) {
+    parameters['TITULO_EXTRA'] = `Filtrado por: ${Object.keys(filters).join(', ')}`;
+    console.log('📋 Reporte con filtros aplicados:', Object.keys(filters));
+  }
+  
+  console.log('🚀 Parámetros finales enviados a JasperReports:', parameters);
+  
+  return this.generateReport(reportPath, 'pdf', parameters);
+}
 
   // Listar reportes disponibles en el servidor
   async listReports() {
@@ -156,4 +188,5 @@ class JasperService {
 } 
 
 module.exports = new JasperService();
+
 
