@@ -605,7 +605,14 @@ class CrudService {
         params.push(value);
         currentParamCount++;
         break;
-
+      
+      case "<>":
+      case "text_not_equal":
+        clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
+        params.push(`${value}`);
+        currentParamCount++;
+        break;
+      
       case "not_equal":
       case "!=":
         clause = `${columnRef} != $${currentParamCount}`;
