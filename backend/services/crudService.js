@@ -1,7 +1,6 @@
 // services/crudService.js
 const { executeQuery, executeTransaction } = require("../config/database");
 const SchemaService = require("./schemaService");
-//const AdvancedFilterService = require("./advancedFilterService"); // 🚀 NUEVO: Servicio de filtros avanzados
 
 class CrudService {
   // CREATE - Insertar nuevo registro
@@ -119,44 +118,46 @@ class CrudService {
           columnInfo
         );
         if (typeof value === "boolean") {
-          console.log(`🔍 Aplicando filtro para ${column}: ${value}`,
-          "~~-->",Boolean(value));
+          console.log(
+            `🔍 Aplicando filtro para ${column}: ${value}`,
+            "~~-->",
+            Boolean(value)
+          );
         }
         if (columnInfo) {
-
           //solo nombreCampo, usar iLIKE
           if (typeof value === "string" && columnInfo.data_type === "text") {
-            whereConditions.push(`${tableName}.${column} ILIKE $${paramCount}`);
+            whereConditions.push(`unaccent(${tableName}.${column}) ILIKE $${paramCount}`);
             params.push(`%${value}%`);
-          } 
+          }
           paramCount++;
-        }else {
-          
-            //diferente de campoCon~CondicionAñadida
-            //hacer split con caracter ~ para separar campo de operador
-            let conditions1 = (column + "~" + value).split("~"); // { field, operator, value } = condition
-            let conditions={
-              field: conditions1[0],
-              operator: conditions1[1],
-              value: value}
-            console.log(`>>>Aplicando filtro para No-columnInfo: ${value}`,"~~~>",conditions1);
-            //const condicionArray = column ? column.split('~') : [];
-            //construir y agregar condicion where
-            //AdvancedFilterService.buildConditionClause(conditions,tableName, paramCount);
-            
-            const { clause, conditionParams, newParamCount } =
-              this.buildConditionClause(
-                conditions,
-                tableName,
-                paramCount
-              );
+        } else {
+          //diferente de campoCon~CondicionAñadida
+          //hacer split con caracter ~ para separar campo de operador
+          let columnAndOperator = column.split("~"); // { field, operator, value } = condition
+          let conditions = {
+            field: columnAndOperator[0],
+            operator: columnAndOperator[1],
+            value: value,
+          };
+          console.log(
+            `>>>Aplicando filtro para No-columnInfo: ${value}`,
+            "~~~>",
+            conditions
+          );
+          //const condicionArray = column ? column.split('~') : [];
+          //construir y agregar condicion where
+          //AdvancedFilterService.buildConditionClause(conditions,tableName, paramCount);
 
-            if (clause) {
-              console.log("🔍 Agregando condición:*---->", clause);
-              whereConditions.push(clause);
-              params.push(conditionParams);
-              paramCount = newParamCount;
-              /*
+          const { clause, conditionParams, newParamCount } =
+            this.buildConditionClause(conditions, tableName, paramCount);
+
+          if (clause) {
+            console.log("🔍 Agregando condición:*---->", clause);
+            whereConditions.push(clause);
+            params.push(conditionParams);
+            paramCount = newParamCount;
+            /*
               // Agregar operador lógico si no es la primera condición
               if (i > 0 && condition.logicalOperator) {
                 conditionClauses.push(`${condition.logicalOperator} ${clause}`);
@@ -166,15 +167,15 @@ class CrudService {
               
               params.push(...conditionParams);
               currentParamCount = newParamCount;*/
-            }
+          }
 
-            /*
+          /*
             //agregar condicion a whereConditions
             whereConditions.push(`${tableName}.${column} = $${paramCount}`);
             
             params.push(value);
             */
-          }
+        }
       }
     });
 
@@ -588,21 +589,24 @@ class CrudService {
   // Construir cláusula individual según el operador
   static buildConditionClause(condition, tableName, paramCount) {
     const { field, operator, value } = condition;
-    /*
-    const field = condition[0];
-    const operator = condition[1];
-    const value = condition[2];
-    */
     const columnRef = `${tableName}.${field}`;
     let clause = "";
     let params = [];
     let currentParamCount = paramCount;
+
     console.log(condition, "+ operator>>>>", field, operator, value);
     switch (operator) {
       case "equal":
       case "=":
         clause = `${columnRef} = $${currentParamCount}`;
         params.push(value);
+        currentParamCount++;
+        break;
+
+      case "!~":
+      case "text_not_equal":
+        clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
+        params.push(`${value}`);
         currentParamCount++;
         break;
 
@@ -642,39 +646,13 @@ class CrudService {
         currentParamCount++;
         break;
 
-      case "LIKE":
-        clause = `${columnRef} ILIKE $${currentParamCount}`;
+      case "like":
+        clause = `unaccent(${columnRef}) ILIKE $${currentParamCount}`;
         params.push(`%${value}%`);
         currentParamCount++;
         break;
 
-      case "NOT_LIKE":
-        clause = `${columnRef} NOT ILIKE $${currentParamCount}`;
-        params.push(`%${value}%`);
-        currentParamCount++;
-        break;
-
-      case "STARTS_WITH":
-        clause = `${columnRef} ILIKE $${currentParamCount}`;
-        params.push(`${value}%`);
-        currentParamCount++;
-        break;
-
-      case "ENDS_WITH":
-        clause = `${columnRef} ILIKE $${currentParamCount}`;
-        params.push(`%${value}`);
-        currentParamCount++;
-        break;
-
-      case "IS_NULL":
-        clause = `${columnRef} IS NULL`;
-        break;
-
-      case "IS_NOT_NULL":
-        clause = `${columnRef} IS NOT NULL`;
-        break;
-
-      case "BETWEEN":
+      case "between":
         if (value && value.includes(",")) {
           const [min, max] = value.split(",");
           if (min && max) {
@@ -685,6 +663,32 @@ class CrudService {
             currentParamCount += 2;
           }
         }
+        break;
+      case "!≈":
+      case "not_like":
+        clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
+        params.push(`%${value}%`);
+        currentParamCount++;
+        break;
+
+      case "STARTS_WITH":
+        clause = `unaccent(${columnRef}) ILIKE $${currentParamCount}`;
+        params.push(`${value}%`);
+        currentParamCount++;
+        break;
+
+      case "ENDS_WITH":
+        clause = `unaccent(${columnRef}) ILIKE $${currentParamCount}`;
+        params.push(`%${value}`);
+        currentParamCount++;
+        break;
+
+      case "IS_NULL":
+        clause = `${columnRef} IS NULL`;
+        break;
+
+      case "IS_NOT_NULL":
+        clause = `${columnRef} IS NOT NULL`;
         break;
 
       default:
