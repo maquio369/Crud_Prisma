@@ -127,7 +127,9 @@ class CrudService {
         if (columnInfo) {
           //solo nombreCampo, usar iLIKE
           if (typeof value === "string" && columnInfo.data_type === "text") {
-            whereConditions.push(`unaccent(${tableName}.${column}) ILIKE $${paramCount}`);
+            whereConditions.push(
+              `unaccent(${tableName}.${column}) ILIKE $${paramCount}`
+            );
             params.push(`%${value}%`);
           }
           paramCount++;
@@ -147,7 +149,7 @@ class CrudService {
           );
           //const condicionArray = column ? column.split('~') : [];
           //construir y agregar condicion where
-          //AdvancedFilterService.buildConditionClause(conditions,tableName, paramCount);
+          //.buildConditionClause(conditions,tableName, paramCount);
 
           const { clause, conditionParams, newParamCount } =
             this.buildConditionClause(conditions, tableName, paramCount);
@@ -178,31 +180,6 @@ class CrudService {
         }
       }
     });
-
-    // 🚀 PROCESAR FILTROS AVANZADOS
-    // ===============================================
-    if (advancedFilter) {
-      console.log("🔧 Aplicando filtros avanzados...");
-
-      const advancedResult = AdvancedFilterService.processAdvancedFilters(
-        { advancedFilter }, // Pasar el filtro avanzado en el formato esperado
-        tableName,
-        whereConditions,
-        params,
-        paramCount
-      );
-
-      whereConditions = advancedResult.whereConditions;
-      params = advancedResult.params;
-      paramCount = advancedResult.paramCount;
-
-      console.log("✅ Filtros avanzados aplicados:", {
-        conditionsCount: whereConditions.length,
-        paramsCount: params.length,
-        finalParamCount: paramCount,
-      });
-    }
-    // ===============================================
 
     // Construir SELECT y JOINs para incluir relaciones
     let selectColumns = `${tableName}.*`;
@@ -245,7 +222,7 @@ class CrudService {
           );
         }
       }
- 
+
       joinClauses = joins.join(" ");
       if (additionalSelects.length > 0) {
         selectColumns += ", " + additionalSelects.join(", ");
@@ -602,14 +579,14 @@ class CrudService {
         params.push(value);
         currentParamCount++;
         break;
-      
+
       case "<>":
       case "text_not_equal":
         clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
         params.push(`${value}`);
         currentParamCount++;
         break;
-      
+
       case "not_equal":
       case "!=":
         clause = `${columnRef} != $${currentParamCount}`;
@@ -652,6 +629,8 @@ class CrudService {
         currentParamCount++;
         break;
 
+      case "==":
+      case "between_same_day":
       case "between":
         if (value && value.includes(",")) {
           const [min, max] = value.split(",");
@@ -664,6 +643,13 @@ class CrudService {
           }
         }
         break;
+
+      case "month":
+        clause = `EXTRACT(MONTH FROM ${columnRef}) = $${currentParamCount}`;
+        params.push(value);
+        currentParamCount++;
+        break;
+
       case "!≈":
       case "not_like":
         clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
