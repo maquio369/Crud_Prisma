@@ -245,7 +245,7 @@ class CrudService {
           );
         }
       }
-
+ 
       joinClauses = joins.join(" ");
       if (additionalSelects.length > 0) {
         selectColumns += ", " + additionalSelects.join(", ");
@@ -602,14 +602,14 @@ class CrudService {
         params.push(value);
         currentParamCount++;
         break;
-
-      case "!~":
+      
+      case "<>":
       case "text_not_equal":
         clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
         params.push(`${value}`);
         currentParamCount++;
         break;
-
+      
       case "not_equal":
       case "!=":
         clause = `${columnRef} != $${currentParamCount}`;

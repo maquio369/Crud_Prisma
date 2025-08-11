@@ -5,6 +5,7 @@ import Modal from './Modal';
 import RecordForm from './RecordForm';
 import FormStyleFiltersModal from './FormStyleFiltersModal';
 import ExcelJS from 'exceljs';
+import ReportButton from './ReportButton'
 
 
 const Dashboard = () => {
@@ -977,6 +978,14 @@ const downloadExcelFile = (buffer, tableName) => {
   </svg>
   <span>{exportLoading ? 'Exportando...' : 'Exportar'}</span>
 </button>
+
+              {selectedTable === 'años' && (
+  <ReportButton 
+    tableName={selectedTable} 
+    filters={currentFilters}
+  />
+)}
+    
 
               <button className="p-2 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors duration-200">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
