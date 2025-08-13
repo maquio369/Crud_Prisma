@@ -95,6 +95,8 @@ class CrudService {
         col.column_name === "is_deleted"
     );
 
+    const t = Object.entries(filters).length;
+    let j = 0;
     if (
       softDeleteColumn &&
       !filters.hasOwnProperty(softDeleteColumn.column_name)
@@ -109,6 +111,7 @@ class CrudService {
     // Filtros del usuario (filtros simples tradicionales)
     Object.entries(filters).forEach(([column, value]) => {
       if (value !== null && value !== undefined && value !== "") {
+        j++;
         const columnInfo = schema.columns.find(
           (col) => col.column_name === column
         );
@@ -141,6 +144,7 @@ class CrudService {
             field: columnAndOperator[0],
             operator: columnAndOperator[1],
             value: value,
+            logicalOperator: columnAndOperator[2] || "AND",
           };
           console.log(
             `>>>Aplicando filtro para No-columnInfo: ${value}`,
@@ -149,34 +153,31 @@ class CrudService {
           );
           //const condicionArray = column ? column.split('~') : [];
           //construir y agregar condicion where
-          //.buildConditionClause(conditions,tableName, paramCount);
 
           const { clause, conditionParams, newParamCount } =
             this.buildConditionClause(conditions, tableName, paramCount);
 
           if (clause) {
             console.log("🔍 Agregando condición:*---->", clause);
-            whereConditions.push(clause);
+            //whereConditions.push(clause);
+            // Agregar operador lógico si no es la última condición
+            if (j < t && conditions.logicalOperator) {
+              whereConditions.push(`${clause} ${conditions.logicalOperator}`);
+              console.log(
+                " <<<< Agregando connector:-->>>>>>>",
+                `${clause} ${conditions.logicalOperator}`
+              );
+            } else {
+              whereConditions.push(`${clause} `);//here we go ' )'
+              console.log(
+                " <<<< Agregando connector ULT:-->>>>>>>",
+                clause,
+                " <<>> "
+              );
+            }
             params.push(conditionParams);
             paramCount = newParamCount;
-            /*
-              // Agregar operador lógico si no es la primera condición
-              if (i > 0 && condition.logicalOperator) {
-                conditionClauses.push(`${condition.logicalOperator} ${clause}`);
-              } else {
-                conditionClauses.push(clause);
-              }
-              
-              params.push(...conditionParams);
-              currentParamCount = newParamCount;*/
           }
-
-          /*
-            //agregar condicion a whereConditions
-            whereConditions.push(`${tableName}.${column} = $${paramCount}`);
-            
-            params.push(value);
-            */
         }
       }
     });
@@ -243,11 +244,22 @@ class CrudService {
     }
 
     // Query principal
-    const whereClause =
-      whereConditions.length > 0
-        ? `WHERE ${whereConditions.join(" AND ")}`
-        : "";
 
+    // Construir WHERE con conectores lógicos personalizados
+    if (whereConditions.length > 1) {
+      whereConditions[0] = `${whereConditions[0]} AND (`;
+    }
+    let whereClause =
+      whereConditions.length > 0 ? `WHERE ${whereConditions.join(" ")}` : "";
+    if (whereConditions.length > 1) {
+      whereClause += ")";
+    }
+    console.log(
+      "<<< whereClause: >>>",
+      whereClause,
+      "<<< whereConditions: >>>",
+      whereConditions
+    );
     const mainQuery = `
       SELECT ${selectColumns}
       FROM ${tableName}
@@ -681,10 +693,10 @@ class CrudService {
         console.warn(`Operador no soportado: ${operator}`);
         break;
     }
-    console.log("🔧 Cláusula:", clause, "   🅿 Parámetros:", params);
+    console.log("🔧 sentence:", clause, "   🅿 Parámetros:", params);
     return {
       clause,
-      conditionParams: value,
+      conditionParams: params[0], //value,
       newParamCount: currentParamCount,
     };
   }
