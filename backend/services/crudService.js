@@ -99,6 +99,7 @@ class CrudService {
         key.startsWith(softDeleteColumn.column_name) &&
         filters.hasOwnProperty(key)
     )[0];
+    console.log("borrado:>>>>", borrado);
     const t = Object.entries(filters).length;
     let j = 0;
     if (
@@ -348,9 +349,7 @@ class CrudService {
     for (const priority of priorities) {
       const found = schema.columns.find(priority);
       if (found) {
-        console.log(
-          `📝 Columna de display encontrada: ${found.column_name} (${found.data_type})`
-        );
+        //console.log(`📝 Columna de display encontrada: ${found.column_name} (${found.data_type})`);
         return found.column_name;
       }
     }

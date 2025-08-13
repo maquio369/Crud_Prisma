@@ -91,7 +91,7 @@ router.get('/tables/:tableName/foreign-key-options/:columnName', async (req, res
   try {
     const { tableName, columnName } = req.params;
     
-    console.log(`🔗 GET /api/tables/${tableName}/foreign-key-options/${columnName}`);
+    //console.log(`🔗 GET /api/tables/${tableName}/foreign-key-options/${columnName}`);
     
     const options = await CrudService.getForeignKeyOptions(tableName, columnName);
     
@@ -238,13 +238,13 @@ router.get('/tables/:tableName', async (req, res) => {
       ...filters
     } = req.query;
     
-    console.log(`📖 GET /api/tables/${tableName}`, {
+    /*console.log(`📖 GET /api/tables/${tableName}`, {
       page: parseInt(page),
       limit: parseInt(limit),
       filters,
       include: include?.split(',') || []
     });
-    
+    */
     // Validar que la tabla existe
     const tables = await SchemaService.getTables();
     const tableExists = tables.some(t => t.table_name === tableName);
@@ -271,7 +271,7 @@ router.get('/tables/:tableName', async (req, res) => {
         return accumulator;
       }, {})
     };
-    console.log("options-------------------->>", options);
+    console.log(`📖 GET /api/tables/${tableName}`, options);
     const result = await CrudService.read(tableName, options);
     
     res.json({

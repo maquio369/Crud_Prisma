@@ -12,10 +12,10 @@ class SchemaService {
 
   // Obtener todas las tablas
   static async getTables() {
-    console.log('🔍 Obteniendo lista de tablas...');
+    //console.log('🔍 Obteniendo lista de tablas...');
     
     if (this.cache.tables && this.isCacheValid()) {
-      console.log('📋 Usando tablas desde cache');
+      //console.log('📋 Usando tablas desde cache');
       return this.cache.tables;
     }
 
@@ -35,19 +35,19 @@ class SchemaService {
     const result = await executeQuery(query);
     this.cache.tables = result.rows;
     this.cache.lastUpdate = Date.now();
-    
+    /*
     console.log(`✅ Se encontraron ${result.rows.length} tablas:`, 
       result.rows.map(t => t.table_name).join(', '));
-    
+    */
     return result.rows;
   }
 
   // Obtener columnas de una tabla específica
   static async getTableColumns(tableName) {
-    console.log(`🔍 Obteniendo columnas de la tabla: ${tableName}`);
+    //console.log(`🔍 Obteniendo columnas de la tabla: ${tableName}`);
     
     if (this.cache.columns[tableName] && this.isCacheValid()) {
-      console.log('📋 Usando columnas desde cache');
+      //console.log('📋 Usando columnas desde cache');
       return this.cache.columns[tableName];
     }
 
@@ -128,21 +128,20 @@ class SchemaService {
 
     const result = await executeQuery(query, [tableName]);
     this.cache.columns[tableName] = result.rows;
-    
+    /*
     console.log(`✅ Se encontraron ${result.rows.length} columnas en ${tableName}`);
     console.log('Columnas:', result.rows.map(c => 
       `${c.column_name} (${c.data_type}${c.is_primary_key ? ' PK' : ''}${c.is_foreign_key ? ' FK' : ''})`
     ).join(', '));
-    
+    */
     return result.rows;
   }
 
   // Obtener relaciones de una tabla
   static async getTableRelations(tableName) {
-    console.log(`🔍 Obteniendo relaciones de la tabla: ${tableName}`);
+    //console.log(`🔍 Obteniendo relaciones de la tabla: ${tableName}`);
     
     if (this.cache.relations[tableName] && this.isCacheValid()) {
-      console.log('📋 Usando relaciones desde cache');
       return this.cache.relations[tableName];
     }
 
@@ -187,10 +186,10 @@ class SchemaService {
     const result = await executeQuery(query, [tableName]);
     this.cache.relations[tableName] = result.rows;
     
-    console.log(`✅ Se encontraron ${result.rows.length} relaciones para ${tableName}`);
+    //console.log(`✅ Se encontraron ${result.rows.length} relaciones para ${tableName}`);
     if (result.rows.length > 0) {
       result.rows.forEach(rel => {
-        console.log(`- ${rel.relation_type}: ${rel.column_name} -> ${rel.foreign_table_name}.${rel.foreign_column_name}`);
+        //console.log(`- ${rel.relation_type}: ${rel.column_name} -> ${rel.foreign_table_name}.${rel.foreign_column_name}`);
       });
     }
     
@@ -199,7 +198,7 @@ class SchemaService {
 
   // Obtener schema completo de una tabla
   static async getTableSchema(tableName) {
-    console.log(`📊 Obteniendo schema completo de: ${tableName}`);
+    //console.log(`📊 Obteniendo schema completo de: ${tableName}`);
     
     const columns = await this.getTableColumns(tableName);
     const relations = await this.getTableRelations(tableName);
@@ -211,12 +210,12 @@ class SchemaService {
       primaryKey: columns.find(col => col.is_primary_key)?.column_name,
       foreignKeys: columns.filter(col => col.is_foreign_key)
     };
-    
+    /*
     console.log(`✅ Schema de ${tableName}:`);
     console.log(`- Primary Key: ${schema.primaryKey || 'Ninguna'}`);
     console.log(`- Foreign Keys: ${schema.foreignKeys.length}`);
     console.log(`- Total columnas: ${columns.length}`);
-    
+    */
     return schema;
   }
 

@@ -13,9 +13,9 @@ const pool = new Pool({
 const executeQuery = async (query, params = []) => {
   const client = await pool.connect();
   try {
-    console.log('Ejecutando query:', query.substring(0, 100) + '...');
+    //console.log('Ejecutando query:', query.substring(0, 100) + '...');
     const result = await client.query(query, params);
-    console.log('Query ejecutada exitosamente, filas afectadas:', result.rowCount);
+    //console.log('Query ejecutada exitosamente, filas afectadas:', result.rowCount);
     return result;
   } catch (error) {
     console.error('Error en la query de base de datos:', error.message);

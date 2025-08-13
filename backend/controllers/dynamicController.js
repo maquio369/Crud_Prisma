@@ -61,7 +61,7 @@ class DynamicController {
   static async getTableSchema(req, res) {
     try {
       const { tableName } = req.params;
-      console.log(`🔍 GET /api/tables/${tableName}/schema`);
+      //console.log(`🔍 GET /api/tables/${tableName}/schema`);
       
       const schema = await SchemaService.getTableSchema(tableName);
       
@@ -335,7 +335,7 @@ class DynamicController {
     try {
       const { tableName, columnName } = req.params;
       
-      console.log(`🔗 GET /api/tables/${tableName}/foreign-key-options/${columnName}`);
+      //console.log(`🔗 GET /api/tables/${tableName}/foreign-key-options/${columnName}`);
       
       const options = await CrudService.getForeignKeyOptions(tableName, columnName);
       
