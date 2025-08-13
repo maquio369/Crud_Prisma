@@ -20,7 +20,7 @@ class CrudService {
 
       // Excluir primary key si es serial/autoincrement
       const isAutoIncrement = col.is_primary_key && col.is_identity;
-      console.log("🅰️ isAutoIncrement: ", isAutoIncrement);
+      //console.log("🅰️ isAutoIncrement: ", isAutoIncrement);
 
       return hasValue && !isAutoIncrement;
     });
@@ -33,8 +33,8 @@ class CrudService {
     const values = validColumns.map((col) => data[col.column_name]);
     const placeholders = values.map((_, index) => `$${index + 1}`);
 
-    console.log("Columnas a insertar:", columns);
-    console.log("Valores a insertar:", values);
+    //console.log("Columnas a insertar:", columns);
+    //console.log("Valores a insertar:", values);
 
     const query = `
       INSERT INTO ${tableName} (${columns.join(", ")})
@@ -43,14 +43,14 @@ class CrudService {
     `;
 
     const result = await executeQuery(query, values);
-    console.log("✅ Registro creado exitosamente");
+    //console.log("✅ Registro creado exitosamente");
     return result.rows[0];
   }
 
   // READ - Obtener registros con paginación y filtros (CON AUTO-INCLUDE DE FOREIGN KEYS Y FILTROS AVANZADOS)
   static async read(tableName, options = {}) {
-    console.log(`📖 Leyendo registros de tabla: ${tableName}`);
-    console.log("Opciones:", options);
+    //console.log(`📖 Leyendo registros de tabla: ${tableName}`);
+    //console.log("Opciones:", options);
 
     const {
       page = 1,
@@ -79,7 +79,7 @@ class CrudService {
         .filter((tableName) => !include.includes(tableName));
 
       finalInclude = [...include, ...autoForeignTables];
-      console.log("🔗 Auto-incluyendo foreign keys:", autoForeignTables);
+      //console.log("🔗 Auto-incluyendo foreign keys:", autoForeignTables);
     }
 
     // Construir WHERE clause para filtros
@@ -94,23 +94,24 @@ class CrudService {
         col.column_name === "deleted" ||
         col.column_name === "is_deleted"
     );
-    const borrado = Object.keys(filters).filter(key =>key.startsWith(softDeleteColumn.column_name) && filters.hasOwnProperty(key));
+    const borrado = Object.keys(filters).filter(
+      (key) =>
+        key.startsWith(softDeleteColumn.column_name) &&
+        filters.hasOwnProperty(key)
+    )[0];
     const t = Object.entries(filters).length;
     let j = 0;
     if (
-      !(softDeleteColumn && borrado.includes(softDeleteColumn.column_name)  )
+      softDeleteColumn &&
+      borrado?.includes(softDeleteColumn.column_name) === false
     ) {
-      console.log(borrado),
-      console.log(borrado.length,
-        ` 🄱>>> Aplicando filtro automático para soft delete: ${softDeleteColumn.column_name}`,filters
-      )
       whereConditions.push(
         `${tableName}.${softDeleteColumn.column_name} = $${paramCount}`
       );
       params.push(false);
       paramCount++;
     }
-console.log("borradoLen:>>>>",borrado)
+    //console.log("borradoLen:>>>>",borrado)
     // Filtros del usuario (filtros simples tradicionales)
     Object.entries(filters).forEach(([column, value]) => {
       if (value !== null && value !== undefined && value !== "") {
@@ -118,17 +119,7 @@ console.log("borradoLen:>>>>",borrado)
         const columnInfo = schema.columns.find(
           (col) => col.column_name === column
         );
-        console.log(
-          `🔍 Aplicando filtro para ${column}: ${value}`,
-          "~~~~~~>",
-          columnInfo
-        );
         if (typeof value === "boolean") {
-          console.log(
-            `🔍 Aplicando filtro para ${column}: ${value}`,
-            "~~-->",
-            Boolean(value)
-          );
         }
         if (columnInfo) {
           //solo nombreCampo, usar iLIKE
@@ -149,11 +140,6 @@ console.log("borradoLen:>>>>",borrado)
             value: value,
             logicalOperator: columnAndOperator[2] || "AND",
           };
-          console.log(
-            `>>>Aplicando filtro para No-columnInfo: ${value}`,
-            "~~~>",
-            conditions
-          );
           //const condicionArray = column ? column.split('~') : [];
           //construir y agregar condicion where
 
@@ -161,22 +147,13 @@ console.log("borradoLen:>>>>",borrado)
             this.buildConditionClause(conditions, tableName, paramCount);
 
           if (clause) {
-            console.log("🔍 Agregando condición:*---->", clause);
+            //console.log("🔍 Agregando condición:*---->", clause);
             //whereConditions.push(clause);
             // Agregar operador lógico si no es la última condición
             if (j < t && conditions.logicalOperator) {
               whereConditions.push(`${clause} ${conditions.logicalOperator}`);
-              console.log(
-                " <<<< Agregando connector:-->>>>>>>",
-                `${clause} ${conditions.logicalOperator}`
-              );
             } else {
-              whereConditions.push(`${clause} `);//here we go ' )'
-              console.log(
-                " <<<< Agregando connector ULT:-->>>>>>>",
-                clause,
-                " <<>> "
-              );
+              whereConditions.push(`${clause} `);
             }
             params.push(conditionParams);
             paramCount = newParamCount;
@@ -190,7 +167,7 @@ console.log("borradoLen:>>>>",borrado)
     let joinClauses = "";
 
     if (finalInclude.length > 0) {
-      console.log("Incluyendo relaciones:", finalInclude);
+      //console.log("Incluyendo relaciones:", finalInclude);
       const joins = [];
       const additionalSelects = [];
 
@@ -257,12 +234,7 @@ console.log("borradoLen:>>>>",borrado)
     if (whereConditions.length > 1) {
       whereClause += ")";
     }
-    console.log(
-      "<<< whereClause: >>>",
-      whereClause,
-      "<<< whereConditions: >>>",
-      whereConditions
-    );
+
     const mainQuery = `
       SELECT ${selectColumns}
       FROM ${tableName}
@@ -322,10 +294,6 @@ console.log("borradoLen:>>>>",borrado)
       return processedRow;
     });
 
-    console.log(
-      `✅ Se obtuvieron ${dataResult.rows.length} registros de ${total} totales`
-    );
-
     return {
       data: processedData,
       pagination: {
@@ -344,7 +312,7 @@ console.log("borradoLen:>>>>",borrado)
     foreign_column_desc,
     foreign_table_name
   ) {
-    console.log(`📜 get Options List: ${foreign_table_name}`);
+    //console.log(`📜 get Options List: ${foreign_table_name}`);
     const mainQuery = `
       SELECT ${foreign_column_name} as optionvalue, trim(${foreign_column_desc}) as optiontext 
       FROM ${foreign_table_name} 
@@ -352,10 +320,10 @@ console.log("borradoLen:>>>>",borrado)
       LIMIT 1976;
     `;
     const r = await executeQuery(mainQuery);
-    console.log(
+    /*console.log(
       `💬 get Options List ${foreign_table_name}[${r.rows.length}]:`,
       r.rows
-    );
+    );*/
     return r.rows;
   }
 
@@ -388,9 +356,9 @@ console.log("borradoLen:>>>>",borrado)
     }
 
     // Si no encuentra nada, usar la primary key como último recurso
-    console.log(
+    /*console.log(
       "⚠️ No se encontró columna de display apropiada, usando primary key"
-    );
+    );*/
     return schema.primaryKey;
   }
 
@@ -401,10 +369,6 @@ console.log("borradoLen:>>>>",borrado)
 
   // READ ONE - Obtener un registro específico
   static async readOne(tableName, id, include = []) {
-    console.log(
-      `📖 Obteniendo registro individual de ${tableName} con ID: ${id}`
-    );
-
     const schema = await SchemaService.getTableSchema(tableName);
 
     if (!schema.primaryKey) {
@@ -423,8 +387,8 @@ console.log("borradoLen:>>>>",borrado)
 
   // UPDATE - Actualizar registro
   static async update(tableName, id, data) {
-    console.log(`📝 Actualizando registro en tabla: ${tableName}, ID: ${id}`);
-    console.log("Datos para actualizar:", data);
+    //console.log(`📝 Actualizando registro en tabla: ${tableName}, ID: ${id}`);
+    //console.log("Datos para actualizar:", data);
 
     const schema = await SchemaService.getTableSchema(tableName);
 
@@ -450,13 +414,13 @@ console.log("borradoLen:>>>>",borrado)
     );
     const values = validColumns.map((col) => data[col.column_name]);
     values.push(id); // Para el WHERE
-
+    /*
     console.log(
       "Columnas a actualizar:",
       validColumns.map((c) => c.column_name)
     );
     console.log("Valores:", values);
-
+*/
     const query = `
       UPDATE ${tableName}
       SET ${setClauses.join(", ")}
@@ -472,13 +436,13 @@ console.log("borradoLen:>>>>",borrado)
       );
     }
 
-    console.log("✅ Registro actualizado exitosamente");
+    //console.log("✅ Registro actualizado exitosamente");
     return result.rows[0];
   }
 
   // DELETE - Eliminar registro (soft delete si existe el campo)
   static async delete(tableName, id) {
-    console.log(`🗑️ Eliminando registro de tabla: ${tableName}, ID: ${id}`);
+    //console.log(`🗑️ Eliminando registro de tabla: ${tableName}, ID: ${id}`);
 
     const schema = await SchemaService.getTableSchema(tableName);
 
@@ -497,9 +461,6 @@ console.log("borradoLen:>>>>",borrado)
     let query;
     if (softDeleteColumn) {
       // Soft delete
-      console.log(
-        `Realizando soft delete usando columna: ${softDeleteColumn.column_name}`
-      );
       query = `
         UPDATE ${tableName}
         SET ${softDeleteColumn.column_name} = true
@@ -508,7 +469,7 @@ console.log("borradoLen:>>>>",borrado)
       `;
     } else {
       // Hard delete
-      console.log("Realizando hard delete (eliminación física)");
+      //console.log("Realizando hard delete (eliminación física)");
       query = `
         DELETE FROM ${tableName}
         WHERE ${schema.primaryKey} = $1
@@ -524,13 +485,13 @@ console.log("borradoLen:>>>>",borrado)
       );
     }
 
-    console.log("✅ Registro eliminado exitosamente");
+    //console.log("✅ Registro eliminado exitosamente");
     return result.rows[0];
   }
 
   // Obtener opciones para campos de foreign key
   static async getForeignKeyOptions(tableName, columnName) {
-    console.log(`🔗🔗 Obteniendo opciones para FK: ${tableName}.${columnName}`);
+    //console.log(`🔗🔗 Obteniendo opciones para FK: ${tableName}.${columnName}`);
 
     const schema = await SchemaService.getTableSchema(tableName);
     const fkColumn = schema.foreignKeys.find(
@@ -540,13 +501,6 @@ console.log("borradoLen:>>>>",borrado)
     if (!fkColumn) {
       throw new Error(`La columna ${columnName} no es una foreign key`);
     }
-
-    console.log(
-      `🏴‍☠️🏴‍☠️🏴‍☠️ Obteniendo opciones para FK: ${fkColumn.foreign_column_desc}-${fkColumn.column_desc}`
-    );
-    console.log(
-      `🏴‍☠️🏴‍☠️🏴‍☠️ Obteniendo opciones para FK: ${fkColumn.foreign_table_name}-${fkColumn.foreign_column_desc}-${fkColumn.foreign_column_name}`
-    );
 
     const foreignSchema = await SchemaService.getTableSchema(
       fkColumn.foreign_table_name
@@ -562,12 +516,12 @@ console.log("borradoLen:>>>>",borrado)
       displayColumn,
       fkColumn.foreign_table_name
     );
-
+    /*
     console.log(
       `💬✅ opciones para ${fkColumn.foreign_table_name}[${options.length}]`,
       options
     );
-
+*/
     return {
       options: options.map((item) => ({
         value: item["optionvalue"],
@@ -586,7 +540,7 @@ console.log("borradoLen:>>>>",borrado)
     let params = [];
     let currentParamCount = paramCount;
 
-    console.log(condition, "+ operator>>>>", field, operator, value);
+    //console.log(condition, "+ operator>>>>", field, operator, value);
     switch (operator) {
       case "equal":
       case "=":
@@ -620,7 +574,7 @@ console.log("borradoLen:>>>>",borrado)
       case "<":
         clause = `${columnRef} < $${currentParamCount}`;
         params.push(value);
-        console.log(columnRef, " < ", value, " $", currentParamCount);
+        //console.log(columnRef, " < ", value, " $", currentParamCount);
         currentParamCount++;
         break;
 
@@ -696,7 +650,7 @@ console.log("borradoLen:>>>>",borrado)
         console.warn(`Operador no soportado: ${operator}`);
         break;
     }
-    console.log("🔧 sentence:", clause, "   🅿 Parámetros:", params);
+    //console.log("🔧 sentence:", clause, "   🅿 Parámetros:", params);
     return {
       clause,
       conditionParams: params[0], //value,
