@@ -94,20 +94,23 @@ class CrudService {
         col.column_name === "deleted" ||
         col.column_name === "is_deleted"
     );
-
+    const borrado = Object.keys(filters).filter(key =>key.startsWith(softDeleteColumn.column_name) && filters.hasOwnProperty(key));
     const t = Object.entries(filters).length;
     let j = 0;
     if (
-      softDeleteColumn &&
-      !filters.hasOwnProperty(softDeleteColumn.column_name)
+      !(softDeleteColumn && borrado.includes(softDeleteColumn.column_name)  )
     ) {
+      console.log(borrado),
+      console.log(borrado.length,
+        ` 🄱>>> Aplicando filtro automático para soft delete: ${softDeleteColumn.column_name}`,filters
+      )
       whereConditions.push(
         `${tableName}.${softDeleteColumn.column_name} = $${paramCount}`
       );
       params.push(false);
       paramCount++;
     }
-
+console.log("borradoLen:>>>>",borrado)
     // Filtros del usuario (filtros simples tradicionales)
     Object.entries(filters).forEach(([column, value]) => {
       if (value !== null && value !== undefined && value !== "") {
