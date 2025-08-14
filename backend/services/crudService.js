@@ -94,23 +94,16 @@ class CrudService {
         col.column_name === "deleted" ||
         col.column_name === "is_deleted"
     );
-    const borrado = Object.keys(filters).filter(
-      (key) =>
-        key.startsWith(softDeleteColumn.column_name) &&
-        filters.hasOwnProperty(key)
-    )[0];
-    console.log("borrado:>>>>", borrado);
-    const t = Object.entries(filters).length;
+
+    let t = Object.entries(filters).length;
     let j = 0;
-    if (
-      softDeleteColumn &&
-      borrado?.includes(softDeleteColumn.column_name) === false
-    ) {
+    if (softDeleteColumn) {
       whereConditions.push(
         `${tableName}.${softDeleteColumn.column_name} = $${paramCount}`
       );
       params.push(false);
       paramCount++;
+      t--;
     }
     //console.log("borradoLen:>>>>",borrado)
     // Filtros del usuario (filtros simples tradicionales)
@@ -141,23 +134,26 @@ class CrudService {
             value: value,
             logicalOperator: columnAndOperator[2] || "AND",
           };
-          //const condicionArray = column ? column.split('~') : [];
           //construir y agregar condicion where
-
           const { clause, conditionParams, newParamCount } =
             this.buildConditionClause(conditions, tableName, paramCount);
 
           if (clause) {
-            //console.log("🔍 Agregando condición:*---->", clause);
-            //whereConditions.push(clause);
-            // Agregar operador lógico si no es la última condición
-            if (j < t && conditions.logicalOperator) {
-              whereConditions.push(`${clause} ${conditions.logicalOperator}`);
+            if (conditions.field.includes(softDeleteColumn.column_name)) {
+              //si es el campo esta_borrado, solo actualizar valores conditions[0]
+              whereConditions[0] = clause.split("$")[0] + "$1";
+              params[0] = conditionParams[0];
             } else {
-              whereConditions.push(`${clause} `);
+              // Agregar Condición y operador lógico si no es la última condición
+              if (j < t && conditions.logicalOperator) {
+                whereConditions.push(`${clause} ${conditions.logicalOperator}`);
+              } else {
+                //solo agregar condición
+                whereConditions.push(`${clause} `);
+              }
+              params.push(conditionParams[0]);
+              paramCount = newParamCount;
             }
-            params.push(conditionParams);
-            paramCount = newParamCount;
           }
         }
       }
@@ -652,7 +648,7 @@ class CrudService {
     //console.log("🔧 sentence:", clause, "   🅿 Parámetros:", params);
     return {
       clause,
-      conditionParams: params[0], //value,
+      conditionParams: params, //value,
       newParamCount: currentParamCount,
     };
   }
