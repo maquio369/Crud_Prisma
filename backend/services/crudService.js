@@ -96,7 +96,7 @@ class CrudService {
     );
 
     let t = Object.entries(filters).length;
-    let j = 0;
+    let j = -1;
     if (softDeleteColumn) {
       whereConditions.push(
         `${tableName}.${softDeleteColumn.column_name} = $${paramCount}`
