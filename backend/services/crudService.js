@@ -119,7 +119,7 @@ class CrudService {
           //solo nombreCampo, usar iLIKE
           if (typeof value === "string" && columnInfo.data_type === "text") {
             whereConditions.push(
-              `unaccent(${tableName}.${column}) ILIKE $${paramCount}`
+              `unaccent(${tableName}.${column}) ILIKE unaccent($${paramCount})`
             );
             params.push(`%${value}%`);
           }
@@ -546,7 +546,7 @@ class CrudService {
 
       case "<>":
       case "text_not_equal":
-        clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
+        clause = `unaccent(${columnRef}) NOT ILIKE unaccent($${currentParamCount})`;
         params.push(`${value}`);
         currentParamCount++;
         break;
@@ -588,7 +588,7 @@ class CrudService {
         break;
 
       case "like":
-        clause = `unaccent(${columnRef}) ILIKE $${currentParamCount}`;
+        clause = `unaccent(${columnRef}) ILIKE unaccent($${currentParamCount})`;
         params.push(`%${value}%`);
         currentParamCount++;
         break;
@@ -616,19 +616,19 @@ class CrudService {
 
       case "!≈":
       case "not_like":
-        clause = `unaccent(${columnRef}) NOT ILIKE $${currentParamCount}`;
+        clause = `unaccent(${columnRef}) NOT ILIKE unaccent($${currentParamCount})`;
         params.push(`%${value}%`);
         currentParamCount++;
         break;
 
       case "STARTS_WITH":
-        clause = `unaccent(${columnRef}) ILIKE $${currentParamCount}`;
+        clause = `unaccent(${columnRef}) ILIKE unaccent($${currentParamCount})`;
         params.push(`${value}%`);
         currentParamCount++;
         break;
 
       case "ENDS_WITH":
-        clause = `unaccent(${columnRef}) ILIKE $${currentParamCount}`;
+        clause = `unaccent(${columnRef}) ILIKE unaccent($${currentParamCount})`;
         params.push(`%${value}`);
         currentParamCount++;
         break;
