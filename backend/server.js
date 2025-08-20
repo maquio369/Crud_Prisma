@@ -12,7 +12,13 @@ const PORT = process.env.PORT || 3001;
 
 // Middlewares (usando Express built-in, NO body-parser)
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3010', 'http://localhost:5173'],
+  origin: [
+    'http://localhost:3000',      // Frontend React (puerto por defecto)
+    'http://localhost:3010',      // Puerto específico requerido
+    'http://localhost:5173',      // Vite dev server
+    'http://172.16.35.75:3010',   // IP específica puerto 3010 - NUEVO
+    'http://localhost:3001'       // Backend (por si se necesita)
+  ],
   credentials: true
 }));
 
