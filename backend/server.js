@@ -14,9 +14,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: [
     'http://localhost:3000',      // Frontend React (puerto por defecto)
-    'http://localhost:3010',      // Puerto específico requerido
+    'http://localhost:3010',      // Puerto específico anterior
+    'http://localhost:3016',      // NUEVO: Puerto del nuevo frontend dockerizado
     'http://localhost:5173',      // Vite dev server
-    'http://172.16.35.75:3010',   // IP específica puerto 3010 - NUEVO
+    'http://172.16.35.75:3010',   // IP específica puerto 3010 - ANTERIOR
+    'http://172.16.35.75:3016',   // NUEVO: IP específica puerto 3016
     'http://localhost:3001'       // Backend (por si se necesita)
   ],
   credentials: true
