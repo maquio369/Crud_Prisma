@@ -78,8 +78,23 @@ class CrudService {
         .map((fk) => fk.foreign_table_name)
         .filter((tableName) => !include.includes(tableName));
 
-      finalInclude = [...include, ...autoForeignTables];
-      //console.log("🔗 Auto-incluyendo foreign keys:", autoForeignTables);
+      const autoForeignTables2 = schema.foreignKeys
+        .map((fk) => ({
+          foreign_table_name: fk.foreign_table_name,
+          column_name: fk.column_name,
+        }))
+        .filter(
+          ({ foreign_table_name }) => !include.includes(foreign_table_name)
+        );
+/*
+      console.log(
+        "🔗 Auto-incluyendo foreign keys:",
+        autoForeignTables,
+        tableName,
+        autoForeignTables2,
+        schema.foreignKeys
+      );
+      */
     }
 
     // Construir WHERE clause para filtros
@@ -164,19 +179,20 @@ class CrudService {
     let joinClauses = "";
 
     if (finalInclude.length > 0) {
-      //console.log("Incluyendo relaciones:", finalInclude);
+      console.log("Incluyendo relaciones:", finalInclude);
       const joins = [];
       const additionalSelects = [];
-
+      let numAlias = 0;
       for (const relation of finalInclude) {
         const fkColumn = schema.foreignKeys.find(
           (fk) => fk.foreign_table_name === relation
         );
-
+console.log("Incluyendo fkColumn:", fkColumn);
         if (fkColumn) {
+          numAlias++;
           // Sin _autoref para las referencias FK de otras entidades
           const alias = `${
-            tableName === relation ? relation + "_autoref" : relation
+            tableName === relation ? relation + "_autoref" : relation + numAlias
           }`; // _autoref necesario para la autoreferencia
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
