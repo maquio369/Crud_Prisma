@@ -68,7 +68,7 @@ class CrudService {
 
     // Auto-incluir todas las foreign keys
     let finalInclude = [...include];
-
+let  autoForeignTables2 = [];
     if (
       autoIncludeForeignKeys &&
       schema.foreignKeys &&
@@ -77,8 +77,11 @@ class CrudService {
       const autoForeignTables = schema.foreignKeys
         .map((fk) => fk.foreign_table_name)
         .filter((tableName) => !include.includes(tableName));
+      
+        finalInclude = [...include, ...autoForeignTables];
+     // console.log("🔗 Auto-incluyendo foreign keys:", autoForeignTables);
 
-      const autoForeignTables2 = schema.foreignKeys
+       autoForeignTables2 = schema.foreignKeys
         .map((fk) => ({
           foreign_table_name: fk.foreign_table_name,
           column_name: fk.column_name,
@@ -86,6 +89,7 @@ class CrudService {
         .filter(
           ({ foreign_table_name }) => !include.includes(foreign_table_name)
         );
+        
 /*
       console.log(
         "🔗 Auto-incluyendo foreign keys:",
@@ -177,17 +181,21 @@ class CrudService {
     // Construir SELECT y JOINs para incluir relaciones
     let selectColumns = `${tableName}.*`;
     let joinClauses = "";
-
+    let finalInclude2=autoForeignTables2;
     if (finalInclude.length > 0) {
       console.log("Incluyendo relaciones:", finalInclude);
       const joins = [];
       const additionalSelects = [];
       let numAlias = 0;
-      for (const relation of finalInclude) {
+      
+      for (const relation2 of finalInclude2) {
         const fkColumn = schema.foreignKeys.find(
-          (fk) => fk.foreign_table_name === relation
+          //(fk) => fk.foreign_table_name === relation          
+          (fk) => fk.foreign_table_name === relation2.foreign_table_name && fk.column_name === relation2.column_name
         );
-console.log("Incluyendo fkColumn:", fkColumn);
+        let relation=relation2.foreign_table_name;
+
+console.log("Incluyendo fkColumn: >>", fkColumn," rel=>>",relation);
         if (fkColumn) {
           numAlias++;
           // Sin _autoref para las referencias FK de otras entidades
