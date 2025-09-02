@@ -68,7 +68,7 @@ class CrudService {
 
     // Auto-incluir todas las foreign keys
     let finalInclude = [...include];
-let  autoForeignTables2 = [];
+    let autoForeignTables2 = [];
     if (
       autoIncludeForeignKeys &&
       schema.foreignKeys &&
@@ -77,11 +77,11 @@ let  autoForeignTables2 = [];
       const autoForeignTables = schema.foreignKeys
         .map((fk) => fk.foreign_table_name)
         .filter((tableName) => !include.includes(tableName));
-      
-        finalInclude = [...include, ...autoForeignTables];
-     // console.log("🔗 Auto-incluyendo foreign keys:", autoForeignTables);
 
-       autoForeignTables2 = schema.foreignKeys
+      finalInclude = [...include, ...autoForeignTables];
+      // console.log("🔗 Auto-incluyendo foreign keys:", autoForeignTables);
+
+      autoForeignTables2 = schema.foreignKeys
         .map((fk) => ({
           foreign_table_name: fk.foreign_table_name,
           column_name: fk.column_name,
@@ -89,8 +89,8 @@ let  autoForeignTables2 = [];
         .filter(
           ({ foreign_table_name }) => !include.includes(foreign_table_name)
         );
-        
-/*
+
+      /*
       console.log(
         "🔗 Auto-incluyendo foreign keys:",
         autoForeignTables,
@@ -181,26 +181,35 @@ let  autoForeignTables2 = [];
     // Construir SELECT y JOINs para incluir relaciones
     let selectColumns = `${tableName}.*`;
     let joinClauses = "";
-    let finalInclude2=autoForeignTables2;
+    let finalInclude2 = autoForeignTables2;
     if (finalInclude.length > 0) {
-      console.log("Incluyendo relaciones:", finalInclude);
+      //      console.log("Incluyendo relaciones:", finalInclude);
       const joins = [];
-      const additionalSelects = [];
-      let numAlias = 0;
-      
+      const additionalSelects = [];      
+      //let count = 0;
       for (const relation2 of finalInclude2) {
         const fkColumn = schema.foreignKeys.find(
-          //(fk) => fk.foreign_table_name === relation          
-          (fk) => fk.foreign_table_name === relation2.foreign_table_name && fk.column_name === relation2.column_name
+          //(fk) => fk.foreign_table_name === relation
+          (fk) =>
+            fk.foreign_table_name === relation2.foreign_table_name &&
+            fk.column_name === relation2.column_name
         );
-        let relation=relation2.foreign_table_name;
+        let relation = relation2.foreign_table_name;
+/*
+        count = schema.foreignKeys.filter(
+          (fk) => fk.foreign_table_name === relation2.foreign_table_name
+        ).length;
 
-console.log("Incluyendo fkColumn: >>", fkColumn," rel=>>",relation);
-        if (fkColumn) {
-          numAlias++;
+        if (count>1) {
+          console.log("Incluyendo fkColumn: >>", fkColumn, " rel=>>", relation);
+        }
+*/
+        if (fkColumn) {          
           // Sin _autoref para las referencias FK de otras entidades
           const alias = `${
-            tableName === relation ? relation + "_autoref" : relation + numAlias
+            tableName === relation
+              ? relation + "_autoref"
+              : relation + "_" + relation2.column_name
           }`; // _autoref necesario para la autoreferencia
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
