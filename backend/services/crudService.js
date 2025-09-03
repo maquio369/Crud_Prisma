@@ -185,7 +185,7 @@ class CrudService {
     if (finalInclude.length > 0) {
       //      console.log("Incluyendo relaciones:", finalInclude);
       const joins = [];
-      const additionalSelects = [];      
+      const additionalSelects = [];
       //let count = 0;
       for (const relation2 of finalInclude2) {
         const fkColumn = schema.foreignKeys.find(
@@ -195,7 +195,7 @@ class CrudService {
             fk.column_name === relation2.column_name
         );
         let relation = relation2.foreign_table_name;
-/*
+        /*
         count = schema.foreignKeys.filter(
           (fk) => fk.foreign_table_name === relation2.foreign_table_name
         ).length;
@@ -204,12 +204,12 @@ class CrudService {
           console.log("Incluyendo fkColumn: >>", fkColumn, " rel=>>", relation);
         }
 */
-        if (fkColumn) {          
+        if (fkColumn) {
           // Sin _autoref para las referencias FK de otras entidades
           const alias = `${
             tableName === relation
               ? relation + "_autoref"
-              : relation + "_" + relation2.column_name
+              : relation + "__" + relation2.column_name //usar Doble guion bajo para el alias FK comment
           }`; // _autoref necesario para la autoreferencia
           joins.push(`
             LEFT JOIN ${relation} ${alias} 
@@ -345,10 +345,11 @@ class CrudService {
     //console.log(`📜 get Options List: ${foreign_table_name}`);
     const mainQuery = `
       SELECT ${foreign_column_name} as optionvalue, trim(${foreign_column_desc}) as optiontext 
-      FROM ${foreign_table_name} 
+      FROM ${foreign_table_name}
       WHERE esta_borrado='false' ORDER BY optionText ASC 
       LIMIT 1976;
     `;
+    //console.log(`📜 get MainQuery: ${mainQuery}`);
     const r = await executeQuery(mainQuery);
     /*console.log(
       `💬 get Options List ${foreign_table_name}[${r.rows.length}]:`,
@@ -525,7 +526,10 @@ class CrudService {
     const fkColumn = schema.foreignKeys.find(
       (fk) => fk.column_name === columnName
     );
-
+/*
+    if (columnName === "id_lider_del_proyecto") {
+  console.log("🔗🔗🔗🔗 Obteniendo opciones para LIDER FK: ", fkColumn);
+}*/
     if (!fkColumn) {
       throw new Error(`La columna ${columnName} no es una foreign key`);
     }
@@ -542,7 +546,8 @@ class CrudService {
     const options = await this.getOptionsList(
       fkColumn.foreign_column_name,
       displayColumn,
-      fkColumn.foreign_table_name
+      //fkColumn.foreign_table_name  //avoid ambigous fields on FK comments
+      fkColumn.foreign_table_name+' '+fkColumn.foreign_table_name+'__'+fkColumn.column_name
     );
     /*
     console.log(
