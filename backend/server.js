@@ -19,6 +19,7 @@ app.use(cors({
     'http://localhost:5173',      // Vite dev server
     'http://172.16.35.75:3010',   // IP específica puerto 3010 - ANTERIOR
     'http://172.16.35.75:3016',   // NUEVO: IP específica puerto 3016
+    'http://sag.chiapas.gob.mx:3016', // NUEVO: Dominio (IP pública) puerto 3016
     'http://localhost:3001'       // Backend (por si se necesita)
   ],
   credentials: true
